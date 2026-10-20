@@ -1,0 +1,74 @@
+import type { Dictionary } from "../types";
+
+const en: Dictionary = {
+  common: {
+    appName: "Reading Tracker",
+    soon: "Coming soon",
+    soonBody: "This screen will appear in one of the next phases.",
+  },
+  nav: {
+    home: "Home",
+    library: "Library",
+    start: "Start",
+    notes: "Notes",
+    stats: "Stats",
+  },
+  home: {
+    title: "Home",
+    settings: "Settings",
+  },
+  library: {
+    title: "Library",
+  },
+  session: {
+    title: "Session",
+  },
+  notes: {
+    title: "Notes",
+  },
+  stats: {
+    title: "Stats",
+  },
+  settings: {
+    title: "Settings",
+    language: "Language",
+    theme: "Theme",
+    languageRu: "Русский",
+    languageEn: "English",
+    themeLight: "Light",
+    themeDark: "Dark",
+    back: "Back",
+  },
+  devkit: {
+    title: "Component kit",
+    badge: "development only",
+    sectionIcons: "Icons",
+    sectionButtons: "Buttons",
+    sectionPills: "Pills and chips",
+    sectionSegmented: "Segmented control",
+    sectionInput: "Input",
+    sectionStepper: "Stepper",
+    sectionCards: "Cards",
+    sectionStitch: "Stitch",
+    sectionStat: "Stat tiles",
+    sectionCover: "Covers",
+    buttonPrimary: "Start session",
+    buttonSecondary: "Cancel",
+    buttonText: "Details",
+    pillActive: "Reading",
+    pillInactive: "Want to read",
+    chipDefault: "fiction",
+    chipOk: "on track",
+    chipQuote: "quote",
+    inputLabel: "Book title",
+    inputPlaceholder: "e.g. Dune",
+    cardHeroTitle: "An American Tragedy",
+    cardHeroAuthor: "Theodore Dreiser",
+    cardGoalTitle: "Deadline",
+    cardGoalBody: "29 pages a day, 28 days left",
+    statLabelPages: "pages",
+    statLabelStreak: "streak",
+  },
+};
+
+export default en;

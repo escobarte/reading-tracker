@@ -1,0 +1,72 @@
+const ru = {
+  common: {
+    appName: "Reading Tracker",
+    soon: "Скоро",
+    soonBody: "Этот экран появится в одной из следующих фаз.",
+  },
+  nav: {
+    home: "Главная",
+    library: "Книги",
+    start: "Старт",
+    notes: "Заметки",
+    stats: "Статистика",
+  },
+  home: {
+    title: "Главная",
+    settings: "Настройки",
+  },
+  library: {
+    title: "Книги",
+  },
+  session: {
+    title: "Сессия",
+  },
+  notes: {
+    title: "Заметки",
+  },
+  stats: {
+    title: "Статистика",
+  },
+  settings: {
+    title: "Настройки",
+    language: "Язык",
+    theme: "Тема",
+    languageRu: "Русский",
+    languageEn: "English",
+    themeLight: "Светлая",
+    themeDark: "Тёмная",
+    back: "Назад",
+  },
+  devkit: {
+    title: "Витрина компонентов",
+    badge: "только для разработки",
+    sectionIcons: "Иконки",
+    sectionButtons: "Кнопки",
+    sectionPills: "Пилюли и чипы",
+    sectionSegmented: "Переключатель",
+    sectionInput: "Поле ввода",
+    sectionStepper: "Степпер",
+    sectionCards: "Карточки",
+    sectionStitch: "Стежки",
+    sectionStat: "Плитки статистики",
+    sectionCover: "Обложки",
+    buttonPrimary: "Начать сессию",
+    buttonSecondary: "Отмена",
+    buttonText: "Подробнее",
+    pillActive: "Читаю",
+    pillInactive: "Хочу прочитать",
+    chipDefault: "художественное",
+    chipOk: "в графике",
+    chipQuote: "цитата",
+    inputLabel: "Название книги",
+    inputPlaceholder: "Например, Дюна",
+    cardHeroTitle: "Американская трагедия",
+    cardHeroAuthor: "Теодор Драйзер",
+    cardGoalTitle: "Дедлайн",
+    cardGoalBody: "29 стр. в день, до дедлайна 28 дней",
+    statLabelPages: "страниц",
+    statLabelStreak: "серия",
+  },
+};
+
+export default ru;
