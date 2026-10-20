@@ -13,7 +13,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <AppShell>
+    <AppShell variant="narrow">
       <PageHeader
         title={t.settings.title}
         action={

@@ -8,7 +8,7 @@ const rivetStyle = {
 export function HeroCard({ className = "", children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`relative overflow-hidden rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-hero)] ${className}`}
+      className={`relative overflow-hidden rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-hero)] lg:p-5 ${className}`}
       style={{
         backgroundImage:
           "radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 55%)",

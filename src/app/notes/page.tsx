@@ -9,7 +9,7 @@ export default function NotesPage() {
   const { t } = useLocale();
 
   return (
-    <AppShell>
+    <AppShell variant="narrow">
       <PageHeader title={t.notes.title} />
       <StubBlock />
     </AppShell>

@@ -2,21 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Icon, type IconName } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
 import { useLocale } from "@/i18n/LocaleProvider";
-
-type NavItem = {
-  href: string;
-  icon: IconName;
-  labelKey: "home" | "library" | "notes" | "stats";
-};
-
-const items: NavItem[] = [
-  { href: "/", icon: "home", labelKey: "home" },
-  { href: "/library", icon: "library", labelKey: "library" },
-  { href: "/notes", icon: "notes", labelKey: "notes" },
-  { href: "/stats", icon: "stats", labelKey: "stats" },
-];
+import { NAV_ITEMS, type NavItem } from "./nav-items";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -24,10 +12,10 @@ export function BottomNav() {
 
   return (
     <nav
-      className="relative flex h-21 shrink-0 items-stretch justify-between border-t-2 border-dashed border-stitch bg-nav px-2 pb-[env(safe-area-inset-bottom)]"
+      className="relative flex h-21 shrink-0 items-stretch justify-between border-t-2 border-dashed border-stitch bg-nav px-2 pb-[env(safe-area-inset-bottom)] lg:hidden"
       aria-label={t.nav.home}
     >
-      {items.slice(0, 2).map((item) => (
+      {NAV_ITEMS.slice(0, 2).map((item) => (
         <NavLink key={item.href} item={item} active={pathname === item.href} />
       ))}
 
@@ -47,7 +35,7 @@ export function BottomNav() {
         <span className="text-xs font-bold text-accent">{t.nav.start}</span>
       </Link>
 
-      {items.slice(2).map((item) => (
+      {NAV_ITEMS.slice(2).map((item) => (
         <NavLink key={item.href} item={item} active={pathname === item.href} />
       ))}
     </nav>

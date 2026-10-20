@@ -1,16 +1,16 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "text";
+export type ButtonVariant = "primary" | "secondary" | "text";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   children: ReactNode;
 };
 
-const base =
+export const buttonBaseClass =
   "inline-flex items-center justify-center gap-2 font-serif font-bold transition-colors disabled:opacity-50 disabled:pointer-events-none min-h-11";
 
-const variants: Record<ButtonVariant, string> = {
+export const buttonVariantClasses: Record<ButtonVariant, string> = {
   primary:
     "h-14 rounded-xl bg-accent text-accent-on text-lg px-6 shadow-[var(--shadow-cta)]",
   secondary:
@@ -25,7 +25,10 @@ export function Button({
   ...props
 }: ButtonProps) {
   return (
-    <button className={`${base} ${variants[variant]} ${className}`} {...props}>
+    <button
+      className={`${buttonBaseClass} ${buttonVariantClasses[variant]} ${className}`}
+      {...props}
+    >
       {children}
     </button>
   );

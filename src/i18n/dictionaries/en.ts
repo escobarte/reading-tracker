@@ -17,6 +17,12 @@ const en: Dictionary = {
     title: "Home",
     settings: "Settings",
   },
+  sidebar: {
+    startSession: "Start session",
+    today: "Today",
+    pagesOf: "of",
+    pagesUnit: "pages",
+  },
   library: {
     title: "Library",
   },
@@ -52,6 +58,7 @@ const en: Dictionary = {
     sectionStitch: "Stitch",
     sectionStat: "Stat tiles",
     sectionCover: "Covers",
+    sectionSidebar: "Sidebar (desktop)",
     buttonPrimary: "Start session",
     buttonSecondary: "Cancel",
     buttonText: "Details",

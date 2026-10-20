@@ -15,6 +15,12 @@ const ru = {
     title: "Главная",
     settings: "Настройки",
   },
+  sidebar: {
+    startSession: "Начать сессию",
+    today: "Сегодня",
+    pagesOf: "из",
+    pagesUnit: "стр.",
+  },
   library: {
     title: "Книги",
   },
@@ -50,6 +56,7 @@ const ru = {
     sectionStitch: "Стежки",
     sectionStat: "Плитки статистики",
     sectionCover: "Обложки",
+    sectionSidebar: "Боковая панель (ПК)",
     buttonPrimary: "Начать сессию",
     buttonSecondary: "Отмена",
     buttonText: "Подробнее",

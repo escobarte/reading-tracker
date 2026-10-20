@@ -118,6 +118,17 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:not(:disabled),
+a,
+[role="button"] {
+  cursor: pointer;
+}
+
 .theme-surface {
   background-color: var(--bg);
   background-image: repeating-linear-gradient(

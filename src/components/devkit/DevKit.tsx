@@ -17,6 +17,7 @@ import { StitchBar } from "@/components/ui/StitchBar";
 import { StitchRing } from "@/components/ui/StitchRing";
 import { StatTile } from "@/components/ui/StatTile";
 import { Cover } from "@/components/ui/Cover";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { useTheme, type Theme } from "@/lib/theme";
 
@@ -214,6 +215,12 @@ function ThemePanel({ theme }: { theme: Theme }) {
           {SAMPLE_TITLES.map((sample) => (
             <Cover key={sample} title={sample} size="row" />
           ))}
+        </div>
+      </Group>
+
+      <Group title={t.devkit.sectionSidebar}>
+        <div className="h-[560px] overflow-hidden rounded-lg border border-line">
+          <Sidebar className="!flex h-full" />
         </div>
       </Group>
     </section>

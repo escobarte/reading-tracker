@@ -18,7 +18,7 @@ export default function HomePage() {
           <Link
             href="/settings"
             aria-label={t.home.settings}
-            className="inline-flex h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-dashed border-stitch bg-surface text-text"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-dashed border-stitch bg-surface text-text lg:hidden"
           >
             <Icon name="settings" />
           </Link>

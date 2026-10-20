@@ -9,7 +9,7 @@ export default function SessionPage() {
   const { t } = useLocale();
 
   return (
-    <AppShell>
+    <AppShell variant="focused">
       <PageHeader title={t.session.title} />
       <StubBlock />
     </AppShell>
