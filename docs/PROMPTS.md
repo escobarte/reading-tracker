@@ -235,7 +235,144 @@ desktop-library.png, desktop-stats.png. В начале ответа предл�
 ---
 
 ## Фаза 2 — База и вход
-Промпт будет написан в штабе перед началом фазы (нужны: проект Supabase, способ входа).
+
+Ветка: `phase-2/db-auth`. Вход: email и пароль, регистрация закрыта (решение владельца). Макеты: `docs/mockups/login.png`, `docs/mockups/desktop-login.png`.
+
+**Подготовка владельца (до запуска промпта, около 10 минут).** Названия пунктов в Supabase иногда меняются; если что-то не нашёл, скинь скриншот в штаб.
+1. supabase.com → New project. Имя «Reading Tracker», регион ближайший к тебе (Европа), пароль базы сохрани (в приложении он не нужен).
+2. Project Settings → API Keys: скопируй **Project URL** и **publishable key** (начинается с `sb_publishable_`). Secret key не копируй и никому не отправляй.
+3. Authentication → Sign In / Providers: провайдер Email включён; **выключи «Allow new users to sign up»** (чтобы никто не мог создать аккаунт).
+4. Authentication → Users → Add user → Create new user: твой email и пароль, отметь «Auto Confirm User».
+5. Vercel → проект → Settings → Environment Variables: добавь `NEXT_PUBLIC_SUPABASE_URL` и `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` для Production и Preview.
+6. Создай ветку `phase-2/db-auth`, запусти промпт ниже. Когда Claude Code напишет SQL-файл, выполни его в Supabase → SQL Editor, а ключи положи в `.env.local` (файл не коммитится).
+
+```
+Прочитай по порядку: docs/STATE.md (жёсткие правила), docs/PLAN.md
+(Фаза 2 и «Модель данных») и docs/DESIGN.md (раздел 7, экран «Вход»).
+Композицию экрана входа сверяй с docs/mockups/login.png и
+desktop-login.png. В начале ответа предложи имя ветки (подойдёт
+phase-2/db-auth), git не трогай.
+
+ЗАДАЧА: Фаза 2 — база и вход. Только основа: таблицы, защита, вход,
+серверные хелперы. Никаких экранов с реальными данными.
+
+1. SUPABASE-КЛИЕНТЫ
+- Пакеты @supabase/supabase-js и @supabase/ssr.
+- src/lib/supabase/client.ts (браузер), server.ts (сервер, cookies),
+  proxy.ts (обновление сессии). Переменные окружения:
+  NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.
+  Service/secret-ключ не использовать вообще.
+- Создай .env.example (без значений) и проверь, что .env.local в
+  .gitignore.
+- В Next.js 16 файл прокси называется proxy.ts (раньше middleware.ts),
+  сверься с документацией установленной версии.
+- Проверка пользователя на сервере через getClaims() (не доверять
+  getSession()). Хелпер getCurrentUser() в src/lib.
+
+2. ЗАЩИТА МАРШРУТОВ
+- Любой маршрут без входа ведёт на /login. Исключения (должны быть
+  доступны без входа, иначе сломается установка PWA): /login,
+  /manifest.webmanifest (или как он называется у нас), /sw.js, /icons/*,
+  статика Next.js, шрифты.
+- Вошедший пользователь на /login перенаправляется на /.
+- Service worker не менять; только проверить, что вход и редиректы с
+  ним работают.
+
+3. ЭКРАН ВХОДА /login
+- Строго по DESIGN.md, раздел «Вход», и по макетам: без BottomNav и
+  боковой панели (добавь вариант AppShell «bare»), логотип из корешков
+  (компонент BookSpines, последние два наклонены, параметры в DESIGN.md),
+  «Reading / Tracker», слоган, карточка с полями Email и Пароль,
+  кнопка «Войти». На ПК колонка 440 по центру окна.
+- Поле пароля с кнопкой «показать пароль» (aria-label, зона 44×44).
+  autocomplete: username и current-password, чтобы менеджер паролей
+  Chrome подставлял данные.
+- Вход через signInWithPassword в серверном действии (server action) или
+  route handler. Состояния: загрузка (кнопка неактивна, «Входим…»),
+  ошибка «Неверный email или пароль» строкой под кнопкой цветом
+  --deadline. Регистрации и «забыл пароль» в интерфейсе нет.
+- Тексты только из словарей RU/EN (слоган: «Страница за страницей» /
+  «Page by page»).
+- В /settings добавь кнопку «Выйти» (возвращает на /login).
+
+4. БАЗА: SQL
+- Один файл supabase/migrations/0001_init.sql, который владелец
+  выполнит в Supabase → SQL Editor. Время только timestamptz (UTC).
+  Производные поля не хранить (правило 7).
+- У каждой таблицы: id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id)
+  on delete cascade, created_at timestamptz not null default now().
+- books: title text not null, author, cover_url, total_pages int
+  (check > 0), format text check ('paper','ebook') default 'paper',
+  shelf text check ('want','reading','done','paused') default 'want',
+  queue_position int, series text, series_number numeric, genre text,
+  tags text[] default '{}', google_books_id text, isbn text,
+  language text.
+- readings: book_id → books on delete cascade, started_at, finished_at,
+  rating numeric(2,1) check 0..5, summary text, pause_reason text.
+- sessions: reading_id → readings on delete cascade, started_at not
+  null, ended_at, page_from int, page_to int, pages_read int,
+  seconds int, source text check ('timer','manual') default 'timer'.
+- notes: book_id → books on delete cascade, type text check
+  ('quote','thought','word','photo'), body text, meaning text, page int,
+  photo_path text, is_favorite boolean default false, tags text[]
+  default '{}'.
+- goals: kind text check ('yearly','daily','deadline'), target_value
+  int, year int, reading_id → readings on delete cascade (для дедлайна),
+  due_date date, rest_days int default 0. Уникальность: одна годовая цель
+  на год, одна дневная цель на пользователя.
+- settings: user_id как primary key (одна строка на пользователя),
+  language text check ('ru','en') default 'ru', theme text check
+  ('light','dark') default 'light', reminder_time time, updated_at.
+- Индексы: user_id на всех таблицах, books (user_id, shelf,
+  queue_position), sessions (user_id, started_at), sessions (reading_id),
+  notes (book_id).
+- RLS включён на всех шести таблицах сразу, политики select, insert,
+  update, delete для authenticated: (select auth.uid()) = user_id. Для
+  anon доступа нет (revoke всех прав).
+- Если что-то в модели неочевидно, выбери простое решение и опиши в
+  отчёте.
+
+5. ТИПЫ И ХЕЛПЕРЫ
+- Вручную написанные типы таблиц в src/lib/db/types.ts, соответствующие
+  SQL (без генерации через CLI).
+- Тонкие серверные функции доступа пока не нужны, только основа:
+  getCurrentUser и создание серверного клиента.
+
+6. ПРОВЕРОЧНАЯ СТРАНИЦА /dev/db
+- Доступна только после входа (в production тоже, чтобы владелец проверил
+  на телефоне), нигде не связана ссылками. Поле «название» + кнопка
+  «Создать тестовую книгу», список своих книг, у каждой кнопка
+  «Удалить». Тексты через словари. Страница временная, удалим в Фазе 3.
+
+7. ГОТОВО, КОГДА
+- Без входа любой экран, кроме перечисленных в п. 2, ведёт на /login.
+- Вход владельца работает, после перезагрузки и после закрытия и
+  открытия установленного приложения вход сохраняется. «Выйти» возвращает
+  на /login.
+- Установка PWA на телефон по-прежнему работает (manifest доступен без
+  входа).
+- На /dev/db создаётся, читается и удаляется тестовая книга.
+- Во всех шести таблицах включён RLS. В отчёте дай владельцу два
+  способа проверки: SQL-запрос по pg_tables (rowsecurity = true для
+  всех) и curl на REST API с одним publishable key без входа, который
+  должен вернуть пустой список.
+- Экран входа выглядит как макеты на 390 px и на 1440 px.
+- lint, typecheck, build проходят. Нет hex-значений и «зашитых» строк.
+
+ПРАВИЛА
+- Git не трогай. Ключи API только в переменных окружения. Secret key и
+  service_role не использовать.
+- Дизайн только по токенам из DESIGN.md. Чего нет в DESIGN.md, решай
+  простым вариантом по токенам и укажи в отчёте.
+- Не делай книги, сессии, заметки, экраны с данными: это следующие фазы.
+
+ОТЧЁТ В КОНЦЕ: что сделано, список файлов, какие переменные окружения
+нужны, как выполнить SQL, как проверить RLS, как проверить на телефоне,
+отклонения.
+```
+
+---
 
 ## Фазы 3–11
 Промпты пишутся по одному перед каждой фазой, с учётом того, что к этому моменту уже в коде. Готовые добавляются в этот файл.
