@@ -20,7 +20,9 @@ export type IconName =
   | "check"
   | "more"
   | "drag"
-  | "export";
+  | "export"
+  | "eye"
+  | "eye-off";
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, "viewBox" | "fill"> & {
   name: IconName;
@@ -69,6 +71,12 @@ const paths: Record<IconName, ReactElement> = {
     />
   ),
   export: <path d="M12 15V4M8 8l4-4 4 4M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3" />,
+  eye: (
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+  ),
+  "eye-off": (
+    <path d="M3 3l18 18M10.6 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a16.3 16.3 0 0 1-3.4 4.5M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 3.4-.6M9.9 10a3 3 0 0 0 4.2 4.2" />
+  ),
 };
 
 export function Icon({ name, className, ...props }: IconProps) {

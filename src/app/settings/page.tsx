@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { useTheme } from "@/lib/theme";
+import { logout } from "./actions";
 
 export default function SettingsPage() {
   const { t, locale, setLocale } = useLocale();
@@ -55,6 +57,14 @@ export default function SettingsPage() {
             { value: "dark", label: t.settings.themeDark },
           ]}
         />
+      </section>
+
+      <section className="py-4">
+        <form action={logout}>
+          <Button type="submit" variant="secondary" className="w-full">
+            {t.settings.logout}
+          </Button>
+        </form>
       </section>
     </AppShell>
   );

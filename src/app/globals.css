@@ -26,6 +26,11 @@
   --shadow-cover: 0 8px 16px rgba(60, 40, 10, 0.35);
   --shadow-cta: 0 6px 16px rgba(162, 70, 31, 0.35);
   --shadow-hero: 0 8px 20px rgba(92, 59, 30, 0.18);
+
+  --spine-1: #a2461f;
+  --spine-2: #2f4a3f;
+  --spine-3: #1f6b62;
+  --spine-4: #7d5f22;
 }
 
 [data-theme="dark"] {
@@ -53,6 +58,11 @@
   --shadow-cover: 0 8px 16px rgba(0, 0, 0, 0.5);
   --shadow-cta: 0 0 26px rgba(232, 163, 61, 0.3);
   --shadow-hero: none;
+
+  --spine-1: #e8a33d;
+  --spine-2: #c8643a;
+  --spine-3: #6cc4b6;
+  --spine-4: #d9c9a8;
 }
 
 :root {
