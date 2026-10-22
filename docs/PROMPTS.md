@@ -239,7 +239,7 @@ desktop-library.png, desktop-stats.png. В начале ответа предл�
 Ветка: `phase-2/db-auth`. Вход: email и пароль, регистрация закрыта (решение владельца). Макеты: `docs/mockups/login.png`, `docs/mockups/desktop-login.png`.
 
 **Подготовка владельца (до запуска промпта, около 10 минут).** Названия пунктов в Supabase иногда меняются; если что-то не нашёл, скинь скриншот в штаб.
-1. supabase.com → New project. Имя «Reading Tracker», регион ближайший к тебе (Европа), пароль базы сохрани (в приложении он не нужен).
+1. supabase.com → New project. Имя «Reading Tracker», регион Europe, пароль базы сохрани (в приложении он не нужен). В блоке Security: **Enable Data API** включить, **Automatically expose new tables** выключить, **Enable automatic RLS** включить.
 2. Project Settings → API Keys: скопируй **Project URL** и **publishable key** (начинается с `sb_publishable_`). Secret key не копируй и никому не отправляй.
 3. Authentication → Sign In / Providers: провайдер Email включён; **выключи «Allow new users to sign up»** (чтобы никто не мог создать аккаунт).
 4. Authentication → Users → Add user → Create new user: твой email и пароль, отметь «Auto Confirm User».
@@ -329,7 +329,10 @@ phase-2/db-auth), git не трогай.
   notes (book_id).
 - RLS включён на всех шести таблицах сразу, политики select, insert,
   update, delete для authenticated: (select auth.uid()) = user_id. Для
-  anon доступа нет (revoke всех прав).
+  anon доступа нет (revoke всех прав). В проекте Supabase отключено
+  автоматическое открытие новых таблиц, поэтому права выдай явно:
+  grant usage on schema public to authenticated; grant select, insert,
+  update, delete on все шесть таблиц to authenticated.
 - Если что-то в модели неочевидно, выбери простое решение и опиши в
   отчёте.
 
