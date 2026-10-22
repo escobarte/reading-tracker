@@ -1,0 +1,50 @@
+import type { ReactNode } from "react";
+import { Cover } from "./Cover";
+import type { Book } from "@/lib/db/types";
+
+type BookRowProps = {
+  book: Book;
+  position?: number;
+  isNext?: boolean;
+  selected?: boolean;
+  nextLabel?: string;
+  formatLabel: string;
+  dragHandle?: ReactNode;
+};
+
+export function BookRow({
+  book,
+  position,
+  isNext,
+  selected,
+  nextLabel,
+  formatLabel,
+  dragHandle,
+}: BookRowProps) {
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-[14px] bg-surface py-2.5 pl-3 pr-1.5 ${
+        isNext ? "border-[1.5px] border-accent" : selected ? "border-[1.5px] border-accent" : "border border-line"
+      }`}
+    >
+      {typeof position === "number" && (
+        <span className="w-4 shrink-0 text-center font-mono text-sm text-accent">{position}</span>
+      )}
+      <Cover title={book.title} coverUrl={book.cover_url ?? undefined} size="row" />
+      <div className="min-w-0 flex-1">
+        {isNext && nextLabel && (
+          <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{nextLabel}</p>
+        )}
+        <p className="truncate font-serif text-[17px] font-bold leading-[1.15] text-text">
+          {book.title}
+        </p>
+        {book.author && <p className="truncate font-serif text-[13px] text-muted">{book.author}</p>}
+        <p className="font-mono text-xs text-muted">
+          {formatLabel}
+          {book.total_pages ? ` · ${book.total_pages}` : ""}
+        </p>
+      </div>
+      {dragHandle}
+    </div>
+  );
+}

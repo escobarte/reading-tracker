@@ -14,3 +14,12 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/notes", icon: "notes", labelKey: "notes" },
   { href: "/stats", icon: "stats", labelKey: "stats" },
 ];
+
+export function isNavItemActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  if (pathname === href || pathname.startsWith(`${href}/`)) return true;
+  if (href === "/library" && (pathname === "/books" || pathname.startsWith("/books/"))) {
+    return true;
+  }
+  return false;
+}

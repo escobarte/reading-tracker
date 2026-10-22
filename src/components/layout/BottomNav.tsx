@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { NAV_ITEMS, type NavItem } from "./nav-items";
+import { NAV_ITEMS, isNavItemActive, type NavItem } from "./nav-items";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -16,7 +16,7 @@ export function BottomNav() {
       aria-label={t.nav.home}
     >
       {NAV_ITEMS.slice(0, 2).map((item) => (
-        <NavLink key={item.href} item={item} active={pathname === item.href} />
+        <NavLink key={item.href} item={item} active={isNavItemActive(pathname, item.href)} />
       ))}
 
       <Link
@@ -36,7 +36,7 @@ export function BottomNav() {
       </Link>
 
       {NAV_ITEMS.slice(2).map((item) => (
-        <NavLink key={item.href} item={item} active={pathname === item.href} />
+        <NavLink key={item.href} item={item} active={isNavItemActive(pathname, item.href)} />
       ))}
     </nav>
   );

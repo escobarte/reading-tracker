@@ -6,7 +6,7 @@ import { buttonBaseClass, buttonVariantClasses } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { NAV_ITEMS, type NavItem } from "./nav-items";
+import { NAV_ITEMS, isNavItemActive, type NavItem } from "./nav-items";
 
 export function Sidebar({ className = "" }: { className?: string }) {
   const pathname = usePathname();
@@ -33,7 +33,7 @@ export function Sidebar({ className = "" }: { className?: string }) {
 
       <nav className="flex flex-col gap-1" aria-label={t.nav.home}>
         {NAV_ITEMS.map((item) => (
-          <SidebarLink key={item.href} item={item} active={pathname === item.href} />
+          <SidebarLink key={item.href} item={item} active={isNavItemActive(pathname, item.href)} />
         ))}
       </nav>
 
