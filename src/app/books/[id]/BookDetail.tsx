@@ -51,13 +51,14 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
   return (
     <AppShell>
       <div className="flex items-center justify-between py-5">
-        <Link
-          href="/library"
+        <button
+          type="button"
+          onClick={() => router.back()}
           aria-label={t.common.back}
           className="inline-flex h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-dashed border-stitch bg-surface text-text"
         >
           <Icon name="back" />
-        </Link>
+        </button>
 
         <div className="relative">
           <button
@@ -124,7 +125,13 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
             )}
             {book.genre && <Chip>{book.genre}</Chip>}
           </div>
-          <div className="flex w-full items-center gap-2">
+          <div className="flex w-full flex-col gap-2">
+            <Link href="/session" className="w-full">
+              <Button className="h-14 w-full gap-2 text-lg">
+                <Icon name="start" width={18} height={18} />
+                {t.book.startSession}
+              </Button>
+            </Link>
             <Dropdown
               trigger={
                 <>
@@ -132,19 +139,14 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
                   {shelfLabels[book.shelf]}
                 </>
               }
-              triggerClassName="inline-flex h-14 shrink-0 items-center gap-1.5 rounded-xl border-[1.5px] border-line bg-surface px-4 font-serif text-base text-text"
+              wrapperClassName="relative block w-full"
+              triggerClassName="flex h-13 w-full items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-line bg-surface px-4 font-serif text-base text-text"
               items={(["want", "reading", "done", "paused"] as BookShelf[]).map((value) => ({
                 label: shelfLabels[value],
                 active: book.shelf === value,
                 onSelect: () => handleShelfChange(value),
               }))}
             />
-            <Link href="/session" className="flex-1">
-              <Button className="h-14 w-full gap-2 text-lg">
-                <Icon name="start" width={18} height={18} />
-                {t.book.startSession}
-              </Button>
-            </Link>
           </div>
         </div>
 

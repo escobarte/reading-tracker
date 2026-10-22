@@ -11,7 +11,18 @@ export type BookSearchResult = {
 
 function toHttps(url: string | undefined): string | null {
   if (!url) return null;
-  return url.replace(/^http:/, "https:");
+  return url.replace(/^http:/, "https:").replace(/[?&]edge=curl/, "");
+}
+
+function normalizeForMatch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function matchesQuery(query: string, result: Pick<BookSearchResult, "title" | "author">): boolean {
+  const q = normalizeForMatch(query);
+  const title = normalizeForMatch(result.title);
+  const author = result.author ? normalizeForMatch(result.author) : "";
+  return title.includes(q) || q.includes(title) || (author !== "" && (author.includes(q) || q.includes(author)));
 }
 
 type GoogleVolume = {
@@ -20,6 +31,7 @@ type GoogleVolume = {
     title?: string;
     authors?: string[];
     pageCount?: number;
+    printedPageCount?: number;
     language?: string;
     imageLinks?: { thumbnail?: string; smallThumbnail?: string };
     industryIdentifiers?: { type: string; identifier: string }[];
@@ -40,7 +52,7 @@ function normalizeGoogle(volume: GoogleVolume): BookSearchResult | null {
     google_books_id: volume.id,
     title: info.title,
     author: info.authors?.join(", ") ?? null,
-    total_pages: info.pageCount ?? null,
+    total_pages: info.pageCount ?? info.printedPageCount ?? null,
     language: info.language ?? null,
     cover_url: toHttps(info.imageLinks?.thumbnail ?? info.imageLinks?.smallThumbnail),
     isbn,
@@ -49,7 +61,12 @@ function normalizeGoogle(volume: GoogleVolume): BookSearchResult | null {
 }
 
 async function searchGoogleBooks(query: string): Promise<BookSearchResult[]> {
-  const params = new URLSearchParams({ q: query, maxResults: "10" });
+  const params = new URLSearchParams({
+    q: query,
+    printType: "books",
+    orderBy: "relevance",
+    maxResults: "20",
+  });
   const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
   if (apiKey) params.set("key", apiKey);
 
@@ -59,9 +76,13 @@ async function searchGoogleBooks(query: string): Promise<BookSearchResult[]> {
   if (!response.ok) throw new Error(`Google Books: ${response.status}`);
 
   const json = (await response.json()) as { items?: GoogleVolume[] };
-  return (json.items ?? [])
+  const normalized = (json.items ?? [])
     .map(normalizeGoogle)
-    .filter((result): result is BookSearchResult => result !== null);
+    .filter((result): result is BookSearchResult => result !== null)
+    .filter((result) => result.author !== null);
+
+  const relevant = normalized.filter((result) => matchesQuery(query, result));
+  return (relevant.length > 0 ? relevant : normalized).slice(0, 10);
 }
 
 type OpenLibraryDoc = {

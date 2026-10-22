@@ -15,8 +15,8 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AddButton } from "@/components/ui/AddButton";
 import { BookRow } from "@/components/ui/BookRow";
@@ -34,18 +34,55 @@ import { moveShelfAction, reorderQueueAction } from "./actions";
 const SHELVES: BookShelf[] = ["reading", "want", "done", "paused"];
 type SortMode = "queue" | "title" | "author";
 
+function parseShelf(value: string | null): BookShelf {
+  return value === "want" || value === "done" || value === "paused" ? value : "reading";
+}
+function parseFormat(value: string | null): "all" | BookFormat {
+  return value === "paper" || value === "ebook" ? value : "all";
+}
+function parseSort(value: string | null): SortMode {
+  return value === "title" || value === "author" ? value : "queue";
+}
+
 export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
   const { t, locale } = useLocale();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
   const [books, setBooks] = useState(initialBooks);
-  const [shelf, setShelf] = useState<BookShelf>("reading");
-  const [format, setFormat] = useState<"all" | BookFormat>("all");
-  const [sortMode, setSortMode] = useState<SortMode>("queue");
+  const shelf = parseShelf(searchParams.get("shelf"));
+  const format = parseFormat(searchParams.get("format"));
+  const sortMode = parseSort(searchParams.get("sort"));
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const suppressClickRef = useRef(false);
+
+  function updateParams(patch: { shelf?: BookShelf; format?: "all" | BookFormat; sort?: SortMode }) {
+    const params = new URLSearchParams(searchParams.toString());
+    const defaults = { shelf: "reading", format: "all", sort: "queue" };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === defaults[key as keyof typeof defaults]) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    }
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  function setShelf(value: BookShelf) {
+    updateParams({ shelf: value });
+  }
+  function setFormat(value: "all" | BookFormat) {
+    updateParams({ format: value });
+  }
+  function setSortMode(value: SortMode) {
+    updateParams({ sort: value });
+  }
 
   const shelfLabels: Record<BookShelf, string> = {
     reading: t.library.shelfReading,
@@ -96,16 +133,32 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  function handleDragStart() {
+    suppressClickRef.current = true;
+  }
+
+  function releaseClickSuppression() {
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 150);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over || active.id === over.id) {
+      releaseClickSuppression();
+      return;
+    }
 
     const wantBooks = books
       .filter((book) => book.shelf === "want")
       .sort((a, b) => (a.queue_position ?? 0) - (b.queue_position ?? 0));
     const oldIndex = wantBooks.findIndex((book) => book.id === active.id);
     const newIndex = wantBooks.findIndex((book) => book.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
+    if (oldIndex === -1 || newIndex === -1) {
+      releaseClickSuppression();
+      return;
+    }
 
     const reordered = arrayMove(wantBooks, oldIndex, newIndex);
     const reorderedIds = reordered.map((book) => book.id);
@@ -120,6 +173,7 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
     startTransition(() => {
       reorderQueueAction(reorderedIds).then(() => router.refresh());
     });
+    releaseClickSuppression();
   }
 
   function handleStartReading(id: string) {
@@ -230,13 +284,20 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
           </Link>
         </div>
       ) : (
-        <div className="flex gap-6">
-          <div className="flex-1 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
+        <div className="flex gap-6 lg:items-start">
+          <div className="flex-1 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:self-start">
             {isQueueView ? (
-              <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+              <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={visibleBooks.map((book) => book.id)} strategy={verticalListSortingStrategy}>
                   {visibleBooks.map((book, index) => (
-                    <RowLink key={book.id} book={book} shelf={shelf} onSelect={setSelectedId} selected={selectedId === book.id}>
+                    <RowLink
+                      key={book.id}
+                      book={book}
+                      shelf={shelf}
+                      onSelect={setSelectedId}
+                      selected={selectedId === book.id}
+                      suppressClickRef={suppressClickRef}
+                    >
                       <SortableBookRow
                         book={book}
                         position={index + 1}
@@ -260,7 +321,7 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
           </div>
 
           {selectedBook && (
-            <aside className="hidden w-[320px] shrink-0 lg:block">
+            <aside className="hidden w-[320px] shrink-0 self-start lg:block">
               <SelectedPanel book={selectedBook} onStartReading={handleStartReading} />
             </aside>
           )}
@@ -274,18 +335,24 @@ function RowLink({
   book,
   selected,
   onSelect,
+  suppressClickRef,
   children,
 }: {
   book: Book;
   shelf: BookShelf;
   selected: boolean;
   onSelect: (id: string) => void;
+  suppressClickRef?: React.RefObject<boolean>;
   children: React.ReactNode;
 }) {
   return (
     <Link
       href={`/books/${book.id}`}
       onClick={(event) => {
+        if (suppressClickRef?.current) {
+          event.preventDefault();
+          return;
+        }
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
           return;
         }
@@ -312,12 +379,22 @@ function SelectedPanel({
   const { t } = useLocale();
   const formatLabel =
     book.format === "paper" ? t.library.filterFormatPaper : t.library.filterFormatEbook;
+  const shelfLabels: Record<BookShelf, string> = {
+    reading: t.library.shelfReading,
+    want: t.library.shelfWant,
+    done: t.library.shelfDone,
+    paused: t.library.shelfPaused,
+  };
+  const statusLabel =
+    book.shelf === "want"
+      ? book.queue_position === 1
+        ? t.library.nextLabel
+        : `${book.queue_position ?? ""} ${t.library.positionInQueue}`.trim()
+      : shelfLabels[book.shelf];
 
   return (
     <div className="sticky top-8 rounded-xl border border-line bg-surface p-5 shadow-[var(--shadow-hero)]">
-      <p className="mb-3 font-mono text-xs uppercase tracking-[0.1em] text-accent">
-        {book.shelf === "want" ? t.library.nextLabel : book.shelf}
-      </p>
+      <p className="mb-3 font-mono text-xs uppercase tracking-[0.1em] text-accent">{statusLabel}</p>
       <div className="mb-4 flex justify-center">
         <Cover title={book.title} coverUrl={book.cover_url ?? undefined} size="book" />
       </div>

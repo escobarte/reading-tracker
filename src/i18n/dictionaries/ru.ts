@@ -44,6 +44,7 @@ const ru = {
     empty: "Пока нет книг",
     emptyCta: "Добавить книгу",
     nextLabel: "следующая",
+    positionInQueue: "в очереди",
     dragLabel: "Переместить",
     openBookPage: "Открыть страницу книги",
     startReading: "Начать читать",
@@ -107,6 +108,10 @@ const ru = {
     duplicateLink: "Открыть книгу",
     searchError: "Не удалось выполнить поиск",
     saveError: "Не удалось сохранить книгу",
+    pagesHintEmpty: "Укажите число страниц",
+    langRu: "рус.",
+    langEn: "англ.",
+    langRo: "рум.",
   },
   book: {
     startSession: "Начать сессию",

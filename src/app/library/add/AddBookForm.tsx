@@ -2,24 +2,42 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { BookForm, emptyBookFormValues, type BookFormValues } from "@/components/ui/BookForm";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { useLocale } from "@/i18n/LocaleProvider";
+import type { Dictionary } from "@/i18n/types";
 import type { BookSearchResult } from "@/lib/google-books";
 import { addBookAction, type AddBookResult } from "./actions";
+
+function formatLanguage(code: string | null, t: Dictionary): string | null {
+  if (!code) return null;
+  const normalized = code.trim().toLowerCase();
+  if (normalized === "ru" || normalized === "rus") return t.addbook.langRu;
+  if (normalized === "en" || normalized === "eng") return t.addbook.langEn;
+  if (normalized === "ro" || normalized === "ron" || normalized === "rum") return t.addbook.langRo;
+  return normalized.slice(0, 2).toUpperCase();
+}
 
 export function AddBookForm() {
   const { t } = useLocale();
   const router = useRouter();
+  const duplicateRef = useRef<HTMLDivElement>(null);
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<BookSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
-  const [selected, setSelected] = useState<BookSearchResult | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [manual, setManual] = useState(false);
+  const [duplicate, setDuplicate] = useState<{ id: string; title: string } | null>(null);
+
+  const selected = selectedIndex !== null ? results[selectedIndex] : null;
+
+  function clearDuplicate() {
+    setDuplicate(null);
+  }
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -27,6 +45,7 @@ export function AddBookForm() {
       if (!trimmed) {
         setResults([]);
         setSearchFailed(false);
+        setSelectedIndex(null);
         return;
       }
       setSearching(true);
@@ -35,15 +54,21 @@ export function AddBookForm() {
         const json: { results?: BookSearchResult[]; error?: string } = await response.json();
         setResults(json.results ?? []);
         setSearchFailed(Boolean(json.error));
+        setSelectedIndex(null);
       } catch {
         setResults([]);
         setSearchFailed(true);
+        setSelectedIndex(null);
       } finally {
         setSearching(false);
       }
     }, 300);
     return () => clearTimeout(timeout);
   }, [query]);
+
+  useEffect(() => {
+    if (duplicate) duplicateRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [duplicate]);
 
   const [result, formAction, pending] = useActionState<AddBookResult | undefined, BookFormValues>(
     async (_prev, values) => {
@@ -62,7 +87,11 @@ export function AddBookForm() {
         isbn: selected?.isbn ?? null,
         language: selected?.language ?? null,
       });
-      if (outcome.ok) router.push(`/books/${outcome.id}`);
+      if (outcome.ok) {
+        router.push(`/books/${outcome.id}`);
+      } else if (outcome.reason === "duplicate") {
+        setDuplicate({ id: outcome.existingId, title: outcome.existingTitle });
+      }
       return outcome;
     },
     undefined,
@@ -104,13 +133,16 @@ export function AddBookForm() {
               {t.addbook.foundLabel}
             </p>
             <ul className="mb-4 flex flex-col gap-2">
-              {results.map((item) => {
-                const isSelected = selected?.google_books_id === item.google_books_id && selected?.title === item.title;
+              {results.map((item, index) => {
+                const isSelected = selectedIndex === index;
                 return (
-                  <li key={`${item.google_books_id ?? ""}-${item.title}`}>
+                  <li key={`${item.google_books_id ?? "ol"}-${index}`}>
                     <button
                       type="button"
-                      onClick={() => setSelected(item)}
+                      onClick={() => {
+                        setSelectedIndex(index);
+                        clearDuplicate();
+                      }}
                       className={`flex w-full items-center gap-3 rounded-[14px] bg-surface p-3 text-left ${
                         isSelected ? "border-2 border-accent" : "border border-line"
                       }`}
@@ -120,7 +152,10 @@ export function AddBookForm() {
                         <p className="truncate font-serif text-[18px] font-bold text-text">{item.title}</p>
                         {item.author && <p className="truncate font-serif text-sm text-muted">{item.author}</p>}
                         <p className="font-mono text-xs text-muted">
-                          {[item.total_pages ? `${item.total_pages} ${t.book.pagesUnit}` : null, item.language]
+                          {[
+                            item.total_pages ? `${item.total_pages} ${t.book.pagesUnit}` : null,
+                            formatLanguage(item.language, t),
+                          ]
                             .filter(Boolean)
                             .join(" · ")}
                         </p>
@@ -144,9 +179,10 @@ export function AddBookForm() {
           type="button"
           onClick={() => {
             setManual(true);
-            setSelected(null);
+            setSelectedIndex(null);
             setResults([]);
             setQuery("");
+            clearDuplicate();
           }}
           className="flex h-12 w-full items-center justify-center rounded-xl border-[1.5px] border-dashed border-stitch font-serif text-base text-text"
         >
@@ -156,21 +192,30 @@ export function AddBookForm() {
 
       <div className="flex-1 lg:max-w-[460px]">
         <BookForm
-          key={selected ? `${selected.google_books_id}-${selected.title}` : manual ? "manual" : "empty"}
+          key={selectedIndex !== null ? `result-${selectedIndex}` : manual ? "manual" : "empty"}
           initial={initialValues}
           mode="add"
           pending={pending || searching}
+          onDirty={clearDuplicate}
           onSubmit={(values) => formAction(values)}
+          duplicateBanner={
+            duplicate && (
+              <div
+                ref={duplicateRef}
+                className="flex flex-col gap-2 rounded-xl border-[1.5px] border-deadline bg-surface p-3.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <p className="font-serif text-sm font-bold text-deadline">{t.addbook.duplicateMessage}</p>
+                <Link
+                  href={`/books/${duplicate.id}`}
+                  className="inline-flex h-9 items-center justify-center rounded-lg border-[1.5px] border-dashed border-deadline px-3 font-serif text-sm font-bold text-deadline"
+                >
+                  {t.addbook.duplicateLink} · {duplicate.title}
+                </Link>
+              </div>
+            )
+          }
         />
 
-        {result && !result.ok && result.reason === "duplicate" && (
-          <p className="mt-3 font-serif text-sm text-deadline">
-            {t.addbook.duplicateMessage} ·{" "}
-            <Link href={`/books/${result.existingId}`} className="underline">
-              {result.existingTitle}
-            </Link>
-          </p>
-        )}
         {result && !result.ok && result.reason === "error" && (
           <p className="mt-3 font-serif text-sm text-deadline">{t.addbook.saveError}</p>
         )}

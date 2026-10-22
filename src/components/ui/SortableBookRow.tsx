@@ -48,6 +48,7 @@ export function SortableBookRow({
             className="flex h-14 w-11 shrink-0 items-center justify-center text-muted touch-none"
             {...attributes}
             {...listeners}
+            onClick={(event) => event.stopPropagation()}
           >
             <Icon name="drag" />
           </button>

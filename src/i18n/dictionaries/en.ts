@@ -46,6 +46,7 @@ const en: Dictionary = {
     empty: "No books yet",
     emptyCta: "Add book",
     nextLabel: "next",
+    positionInQueue: "in queue",
     dragLabel: "Move",
     openBookPage: "Open book page",
     startReading: "Start reading",
@@ -109,6 +110,10 @@ const en: Dictionary = {
     duplicateLink: "Open book",
     searchError: "Search failed",
     saveError: "Could not save the book",
+    pagesHintEmpty: "Enter the page count",
+    langRu: "Rus.",
+    langEn: "Eng.",
+    langRo: "Rom.",
   },
   book: {
     startSession: "Start session",

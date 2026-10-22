@@ -16,6 +16,7 @@ type DropdownProps = {
   align?: "left" | "right";
   showChevron?: boolean;
   triggerClassName?: string;
+  wrapperClassName?: string;
 };
 
 const defaultTriggerClass =
@@ -28,6 +29,7 @@ export function Dropdown({
   align = "left",
   showChevron = true,
   triggerClassName,
+  wrapperClassName = "relative inline-block",
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -49,7 +51,7 @@ export function Dropdown({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <div ref={ref} className={wrapperClassName}>
       <button
         type="button"
         aria-haspopup="listbox"

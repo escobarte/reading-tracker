@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { SegmentedControl } from "./SegmentedControl";
@@ -37,8 +37,10 @@ type BookFormProps = {
   pending: boolean;
   error?: string;
   onSubmit: (values: BookFormValues) => void;
+  onDirty?: () => void;
   showShelf?: boolean;
   showHint?: boolean;
+  duplicateBanner?: ReactNode;
 };
 
 export function BookForm({
@@ -47,8 +49,10 @@ export function BookForm({
   pending,
   error,
   onSubmit,
+  onDirty,
   showShelf = true,
   showHint = true,
+  duplicateBanner,
 }: BookFormProps) {
   const { t } = useLocale();
 
@@ -86,8 +90,23 @@ export function BookForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 shadow-[var(--shadow-hero)]">
       <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.addbook.formTitle}</p>
 
-      <Input label={t.addbook.fieldTitle} value={title} onChange={(e) => setTitle(e.target.value)} required />
-      <Input label={t.addbook.fieldAuthor} value={author} onChange={(e) => setAuthor(e.target.value)} />
+      <Input
+        label={t.addbook.fieldTitle}
+        value={title}
+        onChange={(e) => {
+          setTitle(e.target.value);
+          onDirty?.();
+        }}
+        required
+      />
+      <Input
+        label={t.addbook.fieldAuthor}
+        value={author}
+        onChange={(e) => {
+          setAuthor(e.target.value);
+          onDirty?.();
+        }}
+      />
 
       <div className="flex items-end gap-3">
         <div className="w-[120px]">
@@ -145,9 +164,15 @@ export function BookForm({
         onChange={(e) => setTags(e.target.value)}
       />
 
-      {showHint && <p className="font-serif text-sm text-muted">{t.addbook.pagesHint}</p>}
+      {showHint && (
+        <p className="font-serif text-sm text-muted">
+          {pages.trim() ? t.addbook.pagesHint : t.addbook.pagesHintEmpty}
+        </p>
+      )}
 
       {error && <p className="font-serif text-sm text-deadline">{error}</p>}
+
+      {duplicateBanner}
 
       <Button type="submit" disabled={pending || !title.trim()} className="h-14 w-full text-lg">
         {mode === "add"

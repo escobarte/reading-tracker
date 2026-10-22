@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 
 export type CoverSize = "hero" | "book" | "queue" | "row" | "search" | "session";
 
@@ -37,14 +40,28 @@ function hashColor(title: string) {
 
 export function Cover({ title, coverUrl, size = "row" }: CoverProps) {
   const { w, h, radius, font } = dimensions[size];
+  const [broken, setBroken] = useState(false);
+  const [lastCoverUrl, setLastCoverUrl] = useState(coverUrl);
 
-  if (coverUrl) {
+  if (coverUrl !== lastCoverUrl) {
+    setLastCoverUrl(coverUrl);
+    setBroken(false);
+  }
+
+  if (coverUrl && !broken) {
     return (
       <div
         className={`relative overflow-hidden ${radius} shadow-[var(--shadow-cover)]`}
         style={{ width: w, height: h }}
       >
-        <Image src={coverUrl} alt="" fill sizes={`${w}px`} className="object-cover" />
+        <Image
+          src={coverUrl}
+          alt=""
+          fill
+          sizes={`${w}px`}
+          className="object-cover"
+          onError={() => setBroken(true)}
+        />
       </div>
     );
   }
