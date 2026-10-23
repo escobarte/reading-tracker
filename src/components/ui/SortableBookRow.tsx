@@ -14,6 +14,8 @@ type SortableBookRowProps = {
   formatLabel: string;
   dragLabel: string;
   selected?: boolean;
+  onSelect?: (id: string) => void;
+  suppressClickRef?: React.RefObject<boolean>;
 };
 
 export function SortableBookRow({
@@ -24,6 +26,8 @@ export function SortableBookRow({
   formatLabel,
   dragLabel,
   selected,
+  onSelect,
+  suppressClickRef,
 }: SortableBookRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: book.id,
@@ -32,6 +36,7 @@ export function SortableBookRow({
   return (
     <div
       ref={setNodeRef}
+      className="mb-2 lg:mb-0"
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
     >
       <BookRow
@@ -41,6 +46,8 @@ export function SortableBookRow({
         selected={selected}
         nextLabel={nextLabel}
         formatLabel={formatLabel}
+        onSelect={onSelect}
+        suppressClickRef={suppressClickRef}
         dragHandle={
           <button
             type="button"
@@ -48,7 +55,11 @@ export function SortableBookRow({
             className="flex h-14 w-11 shrink-0 items-center justify-center text-muted touch-none"
             {...attributes}
             {...listeners}
-            onClick={(event) => event.stopPropagation()}
+            draggable={false}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
           >
             <Icon name="drag" />
           </button>

@@ -60,6 +60,7 @@ export function Cover({ title, coverUrl, size = "row" }: CoverProps) {
           fill
           sizes={`${w}px`}
           className="object-cover"
+          draggable={false}
           onError={() => setBroken(true)}
         />
       </div>

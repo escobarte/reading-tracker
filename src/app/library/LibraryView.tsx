@@ -290,32 +290,31 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
               <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={visibleBooks.map((book) => book.id)} strategy={verticalListSortingStrategy}>
                   {visibleBooks.map((book, index) => (
-                    <RowLink
+                    <SortableBookRow
                       key={book.id}
                       book={book}
-                      shelf={shelf}
-                      onSelect={setSelectedId}
+                      position={index + 1}
+                      isNext={index === 0}
                       selected={selectedId === book.id}
+                      nextLabel={t.library.nextLabel}
+                      formatLabel={formatLabels[book.format]}
+                      dragLabel={t.library.dragLabel}
+                      onSelect={setSelectedId}
                       suppressClickRef={suppressClickRef}
-                    >
-                      <SortableBookRow
-                        book={book}
-                        position={index + 1}
-                        isNext={index === 0}
-                        selected={selectedId === book.id}
-                        nextLabel={t.library.nextLabel}
-                        formatLabel={formatLabels[book.format]}
-                        dragLabel={t.library.dragLabel}
-                      />
-                    </RowLink>
+                    />
                   ))}
                 </SortableContext>
               </DndContext>
             ) : (
               visibleBooks.map((book) => (
-                <RowLink key={book.id} book={book} shelf={shelf} onSelect={setSelectedId} selected={selectedId === book.id}>
-                  <BookRow book={book} formatLabel={formatLabels[book.format]} selected={selectedId === book.id} />
-                </RowLink>
+                <div key={book.id} className="mb-2 lg:mb-0">
+                  <BookRow
+                    book={book}
+                    formatLabel={formatLabels[book.format]}
+                    selected={selectedId === book.id}
+                    onSelect={setSelectedId}
+                  />
+                </div>
               ))
             )}
           </div>
@@ -328,44 +327,6 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
         </div>
       )}
     </AppShell>
-  );
-}
-
-function RowLink({
-  book,
-  selected,
-  onSelect,
-  suppressClickRef,
-  children,
-}: {
-  book: Book;
-  shelf: BookShelf;
-  selected: boolean;
-  onSelect: (id: string) => void;
-  suppressClickRef?: React.RefObject<boolean>;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={`/books/${book.id}`}
-      onClick={(event) => {
-        if (suppressClickRef?.current) {
-          event.preventDefault();
-          return;
-        }
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
-          return;
-        }
-        if (window.matchMedia("(min-width: 1024px)").matches) {
-          event.preventDefault();
-          onSelect(book.id);
-        }
-      }}
-      className="mb-2 block lg:mb-0"
-      aria-current={selected ? "true" : undefined}
-    >
-      {children}
-    </Link>
   );
 }
 
