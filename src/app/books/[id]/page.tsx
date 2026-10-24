@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { getBook } from "@/lib/db/books";
+import { getOpenReading } from "@/lib/db/readings";
+import { getCurrentPage, getReadingStats, listRecentSessions } from "@/lib/db/sessions";
 import { BookDetail } from "./BookDetail";
 
 export default async function BookPage({ params }: PageProps<"/books/[id]">) {
@@ -7,5 +9,12 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
   const book = await getBook(id);
   if (!book) notFound();
 
-  return <BookDetail book={book} />;
+  const reading = await getOpenReading(id);
+  const [currentPage, stats, sessions] = await Promise.all([
+    getCurrentPage(id),
+    reading ? getReadingStats(reading.id) : Promise.resolve(null),
+    reading ? listRecentSessions(reading.id, 5) : Promise.resolve([]),
+  ]);
+
+  return <BookDetail book={book} currentPage={currentPage} stats={stats} sessions={sessions} />;
 }

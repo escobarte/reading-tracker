@@ -9,15 +9,25 @@ import { Chip } from "@/components/ui/Chip";
 import { Cover } from "@/components/ui/Cover";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { GoalCard } from "@/components/ui/GoalCard";
+import { HistoryList } from "@/components/ui/HistoryList";
 import { Icon } from "@/components/ui/Icon";
 import { StatTile } from "@/components/ui/StatTile";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { useLocale } from "@/i18n/LocaleProvider";
-import type { Book, BookShelf } from "@/lib/db/types";
+import { formatHoursMinutes } from "@/lib/time";
+import type { Book, BookShelf, ReadingSession } from "@/lib/db/types";
+import type { ReadingStats } from "@/lib/db/sessions";
 import { deleteBookAction, moveShelfAction } from "./actions";
 
-export function BookDetail({ book: initialBook }: { book: Book }) {
-  const { t } = useLocale();
+type BookDetailProps = {
+  book: Book;
+  currentPage: number;
+  stats: ReadingStats | null;
+  sessions: ReadingSession[];
+};
+
+export function BookDetail({ book: initialBook, currentPage, stats, sessions }: BookDetailProps) {
+  const { t, locale } = useLocale();
   const router = useRouter();
   const [book, setBook] = useState(initialBook);
   const [, startTransition] = useTransition();
@@ -46,7 +56,11 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
     });
   }
 
-  const percent = 0;
+  const percent = book.total_pages ? Math.min(100, Math.round((currentPage / book.total_pages) * 100)) : 0;
+  const statTimeValue = stats ? formatHoursMinutes(stats.totalMinutes, t.book.hoursUnit, t.book.minutesUnit) : "—";
+  const statSessionsValue = stats ? String(stats.sessionCount) : "—";
+  const statSpeedValue = stats?.pagesPerHour != null ? String(stats.pagesPerHour) : "—";
+  const statAvgValue = stats?.avgSessionMinutes != null ? String(stats.avgSessionMinutes) : "—";
 
   return (
     <AppShell>
@@ -84,6 +98,16 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
                   onClick={() => setMenuOpen(false)}
                 >
                   {t.book.edit}
+                </Link>
+              </li>
+              <li role="none">
+                <Link
+                  role="menuitem"
+                  href={`/session/manual?book=${book.id}`}
+                  className="flex min-h-11 w-full items-center px-3 py-2.5 font-serif text-sm text-text hover:bg-surface-2"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  {t.book.manualSession}
                 </Link>
               </li>
               <li role="none">
@@ -126,7 +150,7 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
             {book.genre && <Chip>{book.genre}</Chip>}
           </div>
           <div className="flex w-full flex-col gap-2">
-            <Link href="/session" className="w-full">
+            <Link href={`/session?book=${book.id}`} className="w-full">
               <Button className="h-14 w-full gap-2 text-lg">
                 <Icon name="start" width={18} height={18} />
                 {t.book.startSession}
@@ -159,7 +183,7 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
               <p className="font-mono text-xs text-muted">{t.book.progressManual}</p>
             </div>
             <p className="font-mono text-[40px] leading-none text-text">
-              0
+              {currentPage}
               {book.total_pages && (
                 <span className="text-lg text-muted"> / {book.total_pages} {t.book.pagesUnit} · {percent}%</span>
               )}
@@ -168,10 +192,10 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
               <StitchBar percent={percent} />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-              <StatTile label={t.book.statTime} value="—" />
-              <StatTile label={t.book.statSessions} value="—" />
-              <StatTile label={t.book.statSpeed} value="—" />
-              <StatTile label={t.book.statAvg} value="—" />
+              <StatTile label={t.book.statTime} value={statTimeValue} />
+              <StatTile label={t.book.statSessions} value={statSessionsValue} />
+              <StatTile label={t.book.statSpeed} value={statSpeedValue} />
+              <StatTile label={t.book.statAvg} value={statAvgValue} />
             </div>
           </section>
 
@@ -195,7 +219,16 @@ export function BookDetail({ book: initialBook }: { book: Book }) {
             <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">
               {t.book.historyTitle}
             </p>
-            <p className="font-serif text-lg text-muted">{t.book.historyEmpty}</p>
+            {sessions.length > 0 ? (
+              <HistoryList
+                sessions={sessions}
+                locale={locale}
+                minutesUnit={t.book.historyMinutesUnit}
+                pagesUnit={t.book.pagesUnit}
+              />
+            ) : (
+              <p className="font-serif text-lg text-muted">{t.book.historyEmpty}</p>
+            )}
           </section>
         </div>
       </div>

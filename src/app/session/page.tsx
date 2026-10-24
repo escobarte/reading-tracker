@@ -1,17 +1,13 @@
-"use client";
+import { listBooks } from "@/lib/db/books";
+import { SessionView } from "./SessionView";
 
-import { AppShell } from "@/components/layout/AppShell";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { StubBlock } from "@/components/layout/StubBlock";
-import { useLocale } from "@/i18n/LocaleProvider";
+export default async function SessionPage() {
+  const books = await listBooks();
+  const readingBooks = books.filter((book) => book.shelf === "reading");
+  const queueBooks = books
+    .filter((book) => book.shelf === "want")
+    .sort((a, b) => (a.queue_position ?? 0) - (b.queue_position ?? 0))
+    .slice(0, 3);
 
-export default function SessionPage() {
-  const { t } = useLocale();
-
-  return (
-    <AppShell variant="focused">
-      <PageHeader title={t.session.title} />
-      <StubBlock />
-    </AppShell>
-  );
+  return <SessionView books={books} readingBooks={readingBooks} queueBooks={queueBooks} />;
 }

@@ -5,6 +5,7 @@ type StepperProps = {
   incrementLabel: string;
   quickSteps?: number[];
   min?: number;
+  max?: number;
 };
 
 export function Stepper({
@@ -14,8 +15,9 @@ export function Stepper({
   incrementLabel,
   quickSteps = [5, 10, 20],
   min = 0,
+  max,
 }: StepperProps) {
-  const clamp = (next: number) => Math.max(min, next);
+  const clamp = (next: number) => Math.max(min, max !== undefined ? Math.min(max, next) : next);
 
   return (
     <div className="flex flex-col gap-3">
