@@ -55,7 +55,7 @@ export function ManualEntryView({ book, currentPage }: { book: Book; currentPage
       const endedAt = localDateTimeToUtc(date, endTime);
       const startedAt = new Date(endedAt.getTime() - minutesNum * 60000);
 
-      await saveSessionAction({
+      const result = await saveSessionAction({
         bookId: book.id,
         reading_id: readingId,
         started_at: startedAt.toISOString(),
@@ -65,7 +65,7 @@ export function ManualEntryView({ book, currentPage }: { book: Book; currentPage
         seconds: minutesNum * 60,
         source: "manual",
       });
-      router.push(`/books/${book.id}`);
+      router.push(result.closedReading ? `/books/${book.id}?finished=1` : `/books/${book.id}`);
     } finally {
       setPending(false);
     }
@@ -157,6 +157,7 @@ export function ManualEntryView({ book, currentPage }: { book: Book; currentPage
             }}
             decrementLabel={t.session.pageDecrementLabel}
             incrementLabel={t.session.pageIncrementLabel}
+            inputLabel={t.sessionManual.pageToLabel}
             min={displayPageFrom}
             max={mode === "percent" ? 100 : (totalPages ?? undefined)}
           />

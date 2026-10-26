@@ -50,6 +50,16 @@ export function localTimeKey(date: Date = new Date(), timeZone = APP_TIMEZONE): 
   }).format(date);
 }
 
+/** "YYYY-MM" calendar month the given instant falls on, in `timeZone`. */
+export function localMonthKey(date: Date | string = new Date(), timeZone = APP_TIMEZONE): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+  }).format(d);
+}
+
 /** UTC instant for a "YYYY-MM-DD" date and "HH:MM" time, interpreted in `timeZone`. */
 export function localDateTimeToUtc(dateKey: string, timeKey: string, timeZone = APP_TIMEZONE): Date {
   const [hh, mm] = timeKey.split(":").map(Number);
@@ -124,6 +134,27 @@ export function formatHistoryDate(date: Date | string, locale: "ru" | "en"): str
     weekday: "short",
     day: "numeric",
     month: "long",
+  }).format(d);
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+/** Day + short month, e.g. "6 окт" / "6 Oct", for compact labels. */
+export function formatShortDate(date: Date | string, locale: "ru" | "en"): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RO" : "en-GB", {
+    timeZone: APP_TIMEZONE,
+    day: "numeric",
+    month: "short",
+  }).format(d);
+}
+
+/** Month + year for a group header, e.g. "Октябрь 2026" / "October 2026". */
+export function formatMonthLabel(date: Date | string, locale: "ru" | "en"): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const formatted = new Intl.DateTimeFormat(locale === "ru" ? "ru-RO" : "en-GB", {
+    timeZone: APP_TIMEZONE,
+    month: "long",
+    year: "numeric",
   }).format(d);
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }

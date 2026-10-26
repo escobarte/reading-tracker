@@ -28,6 +28,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Pill } from "@/components/ui/Pill";
 import { SortableBookRow } from "@/components/ui/SortableBookRow";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { formatCount } from "@/i18n/plural";
 import type { Book, BookFormat, BookShelf } from "@/lib/db/types";
 import { moveShelfAction, reorderQueueAction } from "./actions";
 
@@ -272,7 +273,7 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
           ]}
         />
         <span className="ml-auto font-mono text-xs text-muted">
-          {visibleBooks.length} {t.library.booksCount}
+          {formatCount(visibleBooks.length, "book", locale)}
         </span>
       </div>
 

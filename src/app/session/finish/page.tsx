@@ -13,6 +13,7 @@ import { StitchBar } from "@/components/ui/StitchBar";
 import { Stepper } from "@/components/ui/Stepper";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
+import { formatCount } from "@/i18n/plural";
 import { DAILY_PAGES_GOAL } from "@/lib/config";
 import { formatMinutesSeconds } from "@/lib/time";
 import { clearActiveSession, elapsedSeconds, readActiveSession, type ActiveSession } from "@/lib/active-session";
@@ -22,7 +23,7 @@ import { getBookAction, getTodayProgressAction, saveSessionAction } from "../act
 type Phase = "loading" | "not-found" | "ready";
 
 export default function SessionFinishPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("loading");
   const [session, setSession] = useState<ActiveSession | null>(null);
@@ -127,7 +128,7 @@ export default function SessionFinishPage() {
 
     setPending(true);
     try {
-      await saveSessionAction({
+      const result = await saveSessionAction({
         bookId: book!.id,
         reading_id: session!.readingId,
         started_at: session!.startedAt,
@@ -138,7 +139,7 @@ export default function SessionFinishPage() {
         source: "timer",
       });
       clearActiveSession();
-      router.push(`/books/${book!.id}`);
+      router.push(result.closedReading ? `/books/${book!.id}?finished=1` : `/books/${book!.id}`);
     } finally {
       setPending(false);
     }
@@ -185,6 +186,7 @@ export default function SessionFinishPage() {
           onChange={handleStepperChange}
           decrementLabel={t.session.pageDecrementLabel}
           incrementLabel={t.session.pageIncrementLabel}
+          inputLabel={t.sessionFinish.stoppedAtPage}
           min={minValue}
           max={maxValue}
         />
@@ -213,7 +215,10 @@ export default function SessionFinishPage() {
           {formatTemplate(t.sessionFinish.todaySummary, { read: previewPages, goal: DAILY_PAGES_GOAL })}
         </p>
         <p className="font-mono text-sm text-muted">
-          {formatTemplate(t.sessionFinish.streakLabel, { days: previewStreak })}
+          {formatTemplate(t.sessionFinish.streakLabel, {
+            days: previewStreak,
+            streak: formatCount(previewStreak, "day", locale),
+          })}
         </p>
       </div>
       <div className="mt-2">

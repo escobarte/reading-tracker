@@ -7,6 +7,7 @@ export type DropdownItem = {
   label: string;
   onSelect: () => void;
   active?: boolean;
+  variant?: "default" | "danger";
 };
 
 type DropdownProps = {
@@ -66,7 +67,7 @@ export function Dropdown({
       {open && (
         <ul
           role="listbox"
-          className={`absolute z-10 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-[var(--shadow-cover)] ${
+          className={`absolute z-20 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-[var(--shadow-cover)] ${
             align === "right" ? "right-0" : "left-0"
           }`}
         >
@@ -80,8 +81,12 @@ export function Dropdown({
                   item.onSelect();
                   setOpen(false);
                 }}
-                className={`flex min-h-11 w-full items-center px-3 py-2.5 text-left font-serif text-sm transition-colors hover:bg-surface-2 ${
-                  item.active ? "font-bold text-accent" : "text-text"
+                className={`flex min-h-11 w-full items-center whitespace-nowrap px-3 py-2.5 text-left font-serif text-sm transition-colors hover:bg-surface-2 ${
+                  item.variant === "danger"
+                    ? "text-deadline"
+                    : item.active
+                      ? "font-bold text-accent"
+                      : "text-text"
                 }`}
               >
                 {item.label}

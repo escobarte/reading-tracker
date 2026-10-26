@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
@@ -11,13 +11,16 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { GoalCard } from "@/components/ui/GoalCard";
 import { HistoryList } from "@/components/ui/HistoryList";
 import { Icon } from "@/components/ui/Icon";
+import { Modal } from "@/components/ui/Modal";
 import { StatTile } from "@/components/ui/StatTile";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { formatTemplate } from "@/i18n/format";
+import { formatCount } from "@/i18n/plural";
 import { formatHoursMinutes } from "@/lib/time";
 import type { Book, BookShelf, ReadingSession } from "@/lib/db/types";
 import type { ReadingStats } from "@/lib/db/sessions";
-import { deleteBookAction, moveShelfAction } from "./actions";
+import { continueLastReadingAction, deleteBookAction, moveShelfAction } from "./actions";
 
 type BookDetailProps = {
   book: Book;
@@ -29,9 +32,11 @@ type BookDetailProps = {
 export function BookDetail({ book: initialBook, currentPage, stats, sessions }: BookDetailProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justFinished = searchParams.get("finished") === "1";
   const [book, setBook] = useState(initialBook);
   const [, startTransition] = useTransition();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [rereadDialogOpen, setRereadDialogOpen] = useState(false);
 
   const shelfLabels: Record<BookShelf, string> = {
     reading: t.library.shelfReading,
@@ -47,6 +52,27 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
     startTransition(() => {
       moveShelfAction(book.id, shelf).then(() => router.refresh());
     });
+  }
+
+  function handleShelfSelect(shelf: BookShelf) {
+    if (shelf === "reading" && book.shelf === "done") {
+      setRereadDialogOpen(true);
+      return;
+    }
+    handleShelfChange(shelf);
+  }
+
+  function handleContinueReading() {
+    setRereadDialogOpen(false);
+    setBook((prev) => ({ ...prev, shelf: "reading" }));
+    startTransition(() => {
+      continueLastReadingAction(book.id).then(() => router.refresh());
+    });
+  }
+
+  function handleRestartReading() {
+    setRereadDialogOpen(false);
+    handleShelfChange("reading");
   }
 
   function handleDelete() {
@@ -74,59 +100,26 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
           <Icon name="back" />
         </button>
 
-        <div className="relative">
-          <button
-            type="button"
-            aria-label={t.book.more}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((value) => !value)}
-            className="inline-flex h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-dashed border-stitch bg-surface text-text"
-          >
-            <Icon name="more" />
-          </button>
-          {menuOpen && (
-            <ul
-              role="menu"
-              className="absolute right-0 z-10 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-[var(--shadow-cover)]"
-            >
-              <li role="none">
-                <Link
-                  role="menuitem"
-                  href={`/books/${book.id}/edit`}
-                  className="flex min-h-11 w-full items-center px-3 py-2.5 font-serif text-sm text-text hover:bg-surface-2"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {t.book.edit}
-                </Link>
-              </li>
-              <li role="none">
-                <Link
-                  role="menuitem"
-                  href={`/session/manual?book=${book.id}`}
-                  className="flex min-h-11 w-full items-center px-3 py-2.5 font-serif text-sm text-text hover:bg-surface-2"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {t.book.manualSession}
-                </Link>
-              </li>
-              <li role="none">
-                <button
-                  role="menuitem"
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    handleDelete();
-                  }}
-                  className="flex min-h-11 w-full items-center px-3 py-2.5 text-left font-serif text-sm text-deadline hover:bg-surface-2"
-                >
-                  {t.book.delete}
-                </button>
-              </li>
-            </ul>
-          )}
-        </div>
+        <Dropdown
+          trigger={<Icon name="more" />}
+          triggerLabel={t.book.more}
+          align="right"
+          showChevron={false}
+          triggerClassName="inline-flex h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-dashed border-stitch bg-surface text-text"
+          items={[
+            { label: t.book.edit, onSelect: () => router.push(`/books/${book.id}/edit`) },
+            { label: t.book.manualSession, onSelect: () => router.push(`/session/manual?book=${book.id}`) },
+            { label: t.book.delete, onSelect: handleDelete, variant: "danger" },
+          ]}
+        />
       </div>
+
+      {justFinished && (
+        <div className="mb-5 flex items-center gap-2 rounded-xl border-[1.5px] border-ok bg-surface p-3.5">
+          <Icon name="check" width={18} height={18} className="shrink-0 text-ok" />
+          <p className="font-serif text-sm font-bold text-ok">{t.book.finishedBanner}</p>
+        </div>
+      )}
 
       <div className="flex flex-col items-center gap-4 pb-6 text-center lg:flex-row lg:items-start lg:gap-6 lg:text-left">
         <div className="flex w-full max-w-[340px] shrink-0 flex-col items-center gap-4 text-center lg:items-start lg:rounded-xl lg:border lg:border-line lg:bg-surface lg:p-5 lg:text-left lg:shadow-[var(--shadow-hero)]">
@@ -150,12 +143,19 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
             {book.genre && <Chip>{book.genre}</Chip>}
           </div>
           <div className="flex w-full flex-col gap-2">
-            <Link href={`/session?book=${book.id}`} className="w-full">
-              <Button className="h-14 w-full gap-2 text-lg">
+            {book.shelf === "done" ? (
+              <Button className="h-14 w-full gap-2 text-lg" onClick={handleRestartReading}>
                 <Icon name="start" width={18} height={18} />
-                {t.book.startSession}
+                {t.book.rereadButton}
               </Button>
-            </Link>
+            ) : (
+              <Link href={`/session?book=${book.id}`} className="w-full">
+                <Button className="h-14 w-full gap-2 text-lg">
+                  <Icon name="start" width={18} height={18} />
+                  {t.book.startSession}
+                </Button>
+              </Link>
+            )}
             <Dropdown
               trigger={
                 <>
@@ -168,7 +168,7 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
               items={(["want", "reading", "done", "paused"] as BookShelf[]).map((value) => ({
                 label: shelfLabels[value],
                 active: book.shelf === value,
-                onSelect: () => handleShelfChange(value),
+                onSelect: () => handleShelfSelect(value),
               }))}
             />
           </div>
@@ -220,18 +220,48 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
               {t.book.historyTitle}
             </p>
             {sessions.length > 0 ? (
-              <HistoryList
-                sessions={sessions}
-                locale={locale}
-                minutesUnit={t.book.historyMinutesUnit}
-                pagesUnit={t.book.pagesUnit}
-              />
+              <>
+                <HistoryList
+                  sessions={sessions}
+                  locale={locale}
+                  minutesUnit={t.book.historyMinutesUnit}
+                  pagesUnit={t.book.pagesUnit}
+                  lessThanMinuteLabel={t.common.lessThanMinute}
+                />
+                <Link
+                  href={`/books/${book.id}/history`}
+                  className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-mono text-sm text-muted"
+                >
+                  {formatTemplate(t.book.historyAllLink, {
+                    count: formatCount(stats?.sessionCount ?? sessions.length, "session", locale),
+                  })}
+                </Link>
+              </>
             ) : (
               <p className="font-serif text-lg text-muted">{t.book.historyEmpty}</p>
             )}
           </section>
         </div>
       </div>
+
+      <Modal
+        open={rereadDialogOpen}
+        onClose={() => setRereadDialogOpen(false)}
+        titleId="reread-dialog-title"
+        title={t.rereadDialog.title}
+      >
+        <div className="flex flex-col gap-3">
+          <Button className="w-full" onClick={handleContinueReading}>
+            {t.rereadDialog.continueOption}
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={handleRestartReading}>
+            {t.rereadDialog.restartOption}
+          </Button>
+          <Button variant="text" className="w-full" onClick={() => setRereadDialogOpen(false)}>
+            {t.common.cancel}
+          </Button>
+        </div>
+      </Modal>
     </AppShell>
   );
 }

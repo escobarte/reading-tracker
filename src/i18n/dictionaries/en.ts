@@ -8,6 +8,7 @@ const en: Dictionary = {
     back: "Back",
     close: "Close",
     cancel: "Cancel",
+    lessThanMinute: "< 1 min",
   },
   nav: {
     home: "Home",
@@ -107,8 +108,24 @@ const en: Dictionary = {
     pageToLabel: "Page “to”",
     save: "Save",
     savingPending: "Saving…",
-    minutesError: "Enter minutes greater than zero.",
+    minutesError: "Minutes — at least 1.",
     pageError: "Page must be between {min} and {max}.",
+  },
+  sessionEdit: {
+    title: "Edit session",
+    save: "Save",
+    savingPending: "Saving…",
+    revertConfirm: "Move the book back to “Reading”?",
+  },
+  history: {
+    title: "All history",
+    statPages: "pages",
+    readingLabel: "#{n}",
+  },
+  rereadDialog: {
+    title: "What should happen to the book?",
+    continueOption: "Continue this reading",
+    restartOption: "Start over (reread)",
   },
   notes: {
     title: "Notes",
@@ -186,6 +203,9 @@ const en: Dictionary = {
     notesEmpty: "Coming soon",
     historyTitle: "Reading history",
     historyEmpty: "No sessions yet",
+    historyAllLink: "All history · {count}",
+    finishedBanner: "The book is finished",
+    rereadButton: "Read again",
     statTime: "total time",
     statSessions: "sessions",
     statSpeed: "pages/hour",

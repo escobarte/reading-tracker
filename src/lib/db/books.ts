@@ -180,6 +180,15 @@ export async function reorderQueue(orderedIds: string[]): Promise<void> {
   );
 }
 
+/** Sets the shelf directly, without touching readings. Used where reading state is managed separately. */
+export async function setShelf(id: string, shelf: BookShelf): Promise<void> {
+  const supabase = await createClient();
+  const queue_position = shelf === "want" ? await nextQueuePosition(supabase) : null;
+  const { error } = await supabase.from("books").update({ shelf, queue_position }).eq("id", id);
+  if (error) throw error;
+  if (shelf !== "want") await renumberQueue(supabase);
+}
+
 export async function moveShelf(id: string, shelf: BookShelf): Promise<void> {
   const supabase = await createClient();
 

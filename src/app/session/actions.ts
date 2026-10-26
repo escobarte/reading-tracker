@@ -8,6 +8,7 @@ import {
   getCurrentPage,
   getStreakDays,
   getTodaySummary,
+  syncReadingCompletion,
   type CreateSessionInput,
 } from "@/lib/db/sessions";
 import type { Book } from "@/lib/db/types";
@@ -45,10 +46,15 @@ export async function prepareSessionAction(
   return { readingId: reading.id, startPage };
 }
 
-export async function saveSessionAction(input: CreateSessionInput & { bookId: string }) {
+export async function saveSessionAction(
+  input: CreateSessionInput & { bookId: string },
+): Promise<{ closedReading: boolean }> {
   const { bookId, ...sessionInput } = input;
-  await createSession(sessionInput);
+  const session = await createSession(sessionInput);
+  const sync = await syncReadingCompletion(bookId, session.reading_id);
   revalidatePath(`/books/${bookId}`);
+  revalidatePath(`/books/${bookId}/history`);
   revalidatePath("/library");
   revalidatePath("/");
+  return { closedReading: sync.justFinished };
 }
