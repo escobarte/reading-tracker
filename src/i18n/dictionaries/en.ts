@@ -183,6 +183,10 @@ const en: Dictionary = {
     submit: "Log in",
     submitPending: "Logging in…",
     error: "Incorrect email or password",
+    google: "Sign in with Google",
+    googlePending: "Redirecting to Google…",
+    or: "or",
+    errorGoogle: "Google sign-in failed. This account is not linked to the app. Use your password.",
   },
   addbook: {
     title: "New book",

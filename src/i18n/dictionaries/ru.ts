@@ -181,6 +181,10 @@ const ru = {
     submit: "Войти",
     submitPending: "Входим…",
     error: "Неверный email или пароль",
+    google: "Войти через Google",
+    googlePending: "Переходим в Google…",
+    or: "или",
+    errorGoogle: "Не удалось войти через Google. Этот аккаунт не привязан к приложению. Войдите по паролю.",
   },
   addbook: {
     title: "Новая книга",
