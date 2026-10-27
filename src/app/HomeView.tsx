@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
-import { GoalCard } from "@/components/ui/GoalCard";
 import { Icon } from "@/components/ui/Icon";
 import { StitchRing } from "@/components/ui/StitchRing";
 import { WeekBars } from "@/components/ui/WeekBars";
 import { YearSpines } from "@/components/ui/YearSpines";
 import { CoverRow } from "@/components/home/CoverRow";
+import { DeadlineSection } from "@/components/home/DeadlineSection";
 import { HeroCarousel } from "@/components/home/HeroCarousel";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
@@ -84,10 +84,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-3 lg:order-3 lg:col-span-1">
-          <GoalCard className="h-full">
-            <p className="font-mono text-xs uppercase tracking-[0.1em] text-deadline">{t.book.deadlineTitle}</p>
-            <p className="mt-2 font-serif text-lg text-muted">{t.book.deadlineEmpty}</p>
-          </GoalCard>
+          <DeadlineSection deadline={data.deadline} reading={data.reading} />
         </div>
 
         <div className="order-5 lg:order-4 lg:col-span-1">

@@ -193,6 +193,25 @@ export function formatHomeDate(date: Date | string, locale: "ru" | "en"): string
   return `${weekday} · ${dayMonth}`;
 }
 
+/** Day + full month for a deadline date, e.g. "20 ноября" / "20 November". */
+export function formatDeadlineDayMonth(dateKey: string, locale: "ru" | "en"): string {
+  const d = new Date(`${dateKey}T00:00:00Z`);
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RO" : "en-GB", {
+    timeZone: APP_TIMEZONE,
+    day: "numeric",
+    month: "long",
+  }).format(d);
+}
+
+/** Day + full month + weekday for the deadline dialog, e.g. "20 ноября, пятница" / "20 November, Friday". */
+export function formatDeadlineWithWeekday(dateKey: string, locale: "ru" | "en"): string {
+  const d = new Date(`${dateKey}T00:00:00Z`);
+  const intlLocale = locale === "ru" ? "ru-RO" : "en-GB";
+  const dayMonth = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, day: "numeric", month: "long" }).format(d);
+  const weekday = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, weekday: "long" }).format(d);
+  return `${dayMonth}, ${weekday}`;
+}
+
 /** Month + year for a group header, e.g. "Октябрь 2026" / "October 2026". */
 export function formatMonthLabel(date: Date | string, locale: "ru" | "en"): string {
   const d = typeof date === "string" ? new Date(date) : date;

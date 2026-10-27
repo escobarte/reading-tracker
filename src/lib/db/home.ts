@@ -1,11 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
-import { DAILY_PAGES_GOAL, YEAR_BOOKS_GOAL } from "@/lib/config";
+import { getDailyPagesGoal, getDeadlineForReading, getYearlyBooksGoal } from "@/lib/db/goals";
+import type { DeadlineCardData } from "@/lib/db/goals";
 import { localDateKey, localWeekRangeUtc, localYear } from "@/lib/time";
+import { getFinishedThisYearCount } from "./readings";
 import { getStreakDays, getTodaySummary } from "./sessions";
 import type { BookFormat } from "./types";
 
 export type HomeReadingBook = {
   id: string;
+  readingId: string;
   title: string;
   author: string | null;
   coverUrl: string | null;
@@ -14,6 +17,8 @@ export type HomeReadingBook = {
   currentPage: number;
   percent: number;
 };
+
+export type HomeDeadline = DeadlineCardData & { bookId: string; bookTitle: string; readingId: string };
 
 export type HomeWeekDay = {
   dateKey: string;
@@ -46,6 +51,7 @@ export type HomeData = {
   queue: HomeQueueBook[];
   year: { finishedCount: number; goal: number };
   recent: HomeRecentBook[];
+  deadline: HomeDeadline | null;
 };
 
 async function fetchReadingSection(): Promise<HomeReadingBook[]> {
@@ -66,6 +72,7 @@ async function fetchReadingSection(): Promise<HomeReadingBook[]> {
   if (readingsError) throw readingsError;
 
   const readingIdToBookId = new Map((openReadings ?? []).map((r) => [r.id, r.book_id]));
+  const readingIdByBookId = new Map((openReadings ?? []).map((r) => [r.book_id, r.id]));
   const startedAtByBookId = new Map((openReadings ?? []).map((r) => [r.book_id, r.started_at ?? ""]));
   const readingIds = (openReadings ?? []).map((r) => r.id);
 
@@ -95,6 +102,7 @@ async function fetchReadingSection(): Promise<HomeReadingBook[]> {
         : 0;
       return {
         id: book.id,
+        readingId: readingIdByBookId.get(book.id) ?? "",
         title: book.title,
         author: book.author,
         coverUrl: book.cover_url,
@@ -104,6 +112,16 @@ async function fetchReadingSection(): Promise<HomeReadingBook[]> {
         percent,
       };
     });
+}
+
+/** Дедлайн первой (по порядку карусели) из читаемых книг, у которой он задан — единственный слот на главной. */
+async function fetchDeadlineSection(reading: HomeReadingBook[]): Promise<HomeDeadline | null> {
+  for (const book of reading) {
+    if (!book.readingId || !book.totalPages) continue;
+    const computed = await getDeadlineForReading(book.readingId, book.totalPages);
+    if (computed) return { ...computed, bookId: book.id, bookTitle: book.title, readingId: book.readingId };
+  }
+  return null;
 }
 
 async function fetchQueueSection(): Promise<HomeQueueBook[]> {
@@ -124,7 +142,7 @@ async function fetchQueueSection(): Promise<HomeQueueBook[]> {
   }));
 }
 
-async function fetchWeekSection(): Promise<HomeData["week"]> {
+async function fetchWeekSection(dailyGoal: number): Promise<HomeData["week"]> {
   const supabase = await createClient();
   const todayKey = localDateKey(new Date());
   const { start, end } = localWeekRangeUtc();
@@ -154,20 +172,12 @@ async function fetchWeekSection(): Promise<HomeData["week"]> {
   }
 
   const totalPages = days.reduce((sum, day) => sum + day.pages, 0);
-  return { days, totalPages, totalMinutes, goalPages: DAILY_PAGES_GOAL * 7 };
+  return { days, totalPages, totalMinutes, goalPages: dailyGoal * 7 };
 }
 
-async function fetchYearSection(): Promise<HomeData["year"]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("readings").select("finished_at").not("finished_at", "is", null);
-  if (error) throw error;
-
-  const currentYear = localYear(new Date());
-  const finishedCount = (data ?? []).filter(
-    (reading) => reading.finished_at && localYear(reading.finished_at) === currentYear,
-  ).length;
-
-  return { finishedCount, goal: YEAR_BOOKS_GOAL };
+async function fetchYearSection(yearGoal: number): Promise<HomeData["year"]> {
+  const finishedCount = await getFinishedThisYearCount();
+  return { finishedCount, goal: yearGoal };
 }
 
 async function fetchRecentSection(): Promise<HomeRecentBook[]> {
@@ -204,23 +214,30 @@ async function fetchRecentSection(): Promise<HomeRecentBook[]> {
 }
 
 export async function getHomeData(): Promise<HomeData> {
-  const [reading, today, streak, week, queue, year, recent] = await Promise.all([
+  const [dailyGoal, yearGoal, reading, today, streak, queue, recent] = await Promise.all([
+    getDailyPagesGoal(),
+    getYearlyBooksGoal(localYear(new Date())),
     fetchReadingSection(),
     getTodaySummary(),
     getStreakDays(),
-    fetchWeekSection(),
     fetchQueueSection(),
-    fetchYearSection(),
     fetchRecentSection(),
+  ]);
+
+  const [week, year, deadline] = await Promise.all([
+    fetchWeekSection(dailyGoal),
+    fetchYearSection(yearGoal),
+    fetchDeadlineSection(reading),
   ]);
 
   return {
     reading,
-    today: { pages: today.pages, minutes: today.minutes, goal: DAILY_PAGES_GOAL },
+    today: { pages: today.pages, minutes: today.minutes, goal: dailyGoal },
     streak,
     week,
     queue,
     year,
     recent,
+    deadline,
   };
 }

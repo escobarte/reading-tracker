@@ -76,7 +76,7 @@ export type Goal = {
   year: number | null;
   reading_id: string | null;
   due_date: string | null;
-  rest_days: number;
+  skip_weekdays: number[];
 };
 
 export type SettingsLanguage = "ru" | "en";

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getBook, moveShelf } from "@/lib/db/books";
+import { getDailyPagesGoal } from "@/lib/db/goals";
 import { ensureOpenReading } from "@/lib/db/readings";
 import {
   createSession,
@@ -22,9 +23,10 @@ export async function getTodayProgressAction(): Promise<{
   minutes: number;
   sessionCount: number;
   streakDays: number;
+  goal: number;
 }> {
-  const [today, streakDays] = await Promise.all([getTodaySummary(), getStreakDays()]);
-  return { ...today, streakDays };
+  const [today, streakDays, goal] = await Promise.all([getTodaySummary(), getStreakDays(), getDailyPagesGoal()]);
+  return { ...today, streakDays, goal };
 }
 
 /** Ставит книгу на полку «Читаю» (если нужно), гарантирует открытое прочтение, отдаёт его id и текущую страницу. */

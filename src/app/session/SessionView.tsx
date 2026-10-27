@@ -11,7 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { StitchRing } from "@/components/ui/StitchRing";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
-import { DAILY_PAGES_GOAL } from "@/lib/config";
+import { DEFAULT_DAILY_PAGES_GOAL } from "@/lib/goals";
 import { formatClock } from "@/lib/time";
 import {
   clearActiveSession,
@@ -41,6 +41,7 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [startingBookId, setStartingBookId] = useState<string | null>(null);
   const [todayPages, setTodayPages] = useState(0);
+  const [todayGoal, setTodayGoal] = useState(DEFAULT_DAILY_PAGES_GOAL);
   const [now, setNow] = useState(() => Date.now());
 
   const resolveBook = useCallback(
@@ -121,7 +122,10 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
     if (phase.kind !== "running") return;
     let cancelled = false;
     getTodayProgressAction().then((progress) => {
-      if (!cancelled) setTodayPages(progress.pages);
+      if (!cancelled) {
+        setTodayPages(progress.pages);
+        setTodayGoal(progress.goal);
+      }
     });
     return () => {
       cancelled = true;
@@ -353,7 +357,7 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
       </div>
 
       <p className="pb-6 text-center font-mono text-sm text-muted">
-        {formatTemplate(t.session.todayBeforeSession, { read: todayPages, goal: DAILY_PAGES_GOAL })}
+        {formatTemplate(t.session.todayBeforeSession, { read: todayPages, goal: todayGoal })}
       </p>
 
       <div className="grid grid-cols-2 gap-3">

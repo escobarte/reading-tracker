@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { deleteBook, moveShelf } from "@/lib/db/books";
+import { deleteDeadlineGoal, saveDeadlineGoal } from "@/lib/db/goals";
 import { continueLastReading } from "@/lib/db/readings";
 import type { BookShelf } from "@/lib/db/types";
 
@@ -23,5 +24,22 @@ export async function continueLastReadingAction(id: string) {
   await continueLastReading(id);
   revalidatePath("/library");
   revalidatePath(`/books/${id}`);
+  revalidatePath("/");
+}
+
+export async function saveDeadlineAction(
+  bookId: string,
+  readingId: string,
+  dueDate: string,
+  skipWeekdays: number[],
+) {
+  await saveDeadlineGoal(readingId, dueDate, skipWeekdays);
+  revalidatePath(`/books/${bookId}`);
+  revalidatePath("/");
+}
+
+export async function removeDeadlineAction(bookId: string, readingId: string) {
+  await deleteDeadlineGoal(readingId);
+  revalidatePath(`/books/${bookId}`);
   revalidatePath("/");
 }

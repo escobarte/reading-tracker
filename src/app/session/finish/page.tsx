@@ -14,7 +14,7 @@ import { Stepper } from "@/components/ui/Stepper";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount } from "@/i18n/plural";
-import { DAILY_PAGES_GOAL } from "@/lib/config";
+import { DEFAULT_DAILY_PAGES_GOAL } from "@/lib/goals";
 import { formatMinutesSeconds } from "@/lib/time";
 import { clearActiveSession, elapsedSeconds, readActiveSession, type ActiveSession } from "@/lib/active-session";
 import type { Book } from "@/lib/db/types";
@@ -30,7 +30,9 @@ export default function SessionFinishPage() {
   const [book, setBook] = useState<Book | null>(null);
   const [mode, setMode] = useState<"pages" | "percent">("pages");
   const [pageValue, setPageValue] = useState(0);
-  const [today, setToday] = useState<{ pages: number; sessionCount: number; streakDays: number } | null>(null);
+  const [today, setToday] = useState<{ pages: number; sessionCount: number; streakDays: number; goal: number } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [now] = useState(() => Date.now());
@@ -118,6 +120,7 @@ export default function SessionFinishPage() {
 
   const previewPages = (today?.pages ?? 0) + pagesRead;
   const previewStreak = today ? (today.sessionCount > 0 ? today.streakDays : today.streakDays + 1) : 0;
+  const dailyGoal = today?.goal ?? DEFAULT_DAILY_PAGES_GOAL;
 
   async function handleSave() {
     if (pageValue < session!.startPage || (totalPages && pageValue > totalPages)) {
@@ -212,7 +215,7 @@ export default function SessionFinishPage() {
       <div className="mt-6 flex items-center justify-between">
         <p className="flex items-center gap-1.5 font-mono text-sm text-ok">
           <Icon name="check" width={14} height={14} />
-          {formatTemplate(t.sessionFinish.todaySummary, { read: previewPages, goal: DAILY_PAGES_GOAL })}
+          {formatTemplate(t.sessionFinish.todaySummary, { read: previewPages, goal: dailyGoal })}
         </p>
         <p className="font-mono text-sm text-muted">
           {formatTemplate(t.sessionFinish.streakLabel, {
@@ -222,7 +225,7 @@ export default function SessionFinishPage() {
         </p>
       </div>
       <div className="mt-2">
-        <StitchBar percent={(previewPages / DAILY_PAGES_GOAL) * 100} />
+        <StitchBar percent={(previewPages / dailyGoal) * 100} />
       </div>
 
       <Button onClick={handleSave} disabled={pending} className="mt-6 h-14 w-full gap-2 text-lg">

@@ -7,7 +7,7 @@ import { buttonBaseClass, buttonVariantClasses } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { DAILY_PAGES_GOAL } from "@/lib/config";
+import { DEFAULT_DAILY_PAGES_GOAL } from "@/lib/goals";
 import { getTodayProgressAction } from "@/app/session/actions";
 import { NAV_ITEMS, isNavItemActive, type NavItem } from "./nav-items";
 
@@ -15,13 +15,17 @@ export function Sidebar({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const { t } = useLocale();
   const [todayPages, setTodayPages] = useState(0);
+  const [todayGoal, setTodayGoal] = useState(DEFAULT_DAILY_PAGES_GOAL);
   const [logoLabel, ...logoTitleParts] = t.common.appName.split(" ");
   const logoTitle = logoTitleParts.join(" ");
 
   useEffect(() => {
     let cancelled = false;
     getTodayProgressAction().then((progress) => {
-      if (!cancelled) setTodayPages(progress.pages);
+      if (!cancelled) {
+        setTodayPages(progress.pages);
+        setTodayGoal(progress.goal);
+      }
     });
     return () => {
       cancelled = true;
@@ -57,17 +61,22 @@ export function Sidebar({ className = "" }: { className?: string }) {
           <p className="font-mono text-2xl text-text">
             {todayPages}{" "}
             <span className="text-sm text-muted">
-              {t.sidebar.pagesOf} {DAILY_PAGES_GOAL} {t.sidebar.pagesUnit}
+              {t.sidebar.pagesOf} {todayGoal} {t.sidebar.pagesUnit}
             </span>
           </p>
           <div className="mt-2">
-            <StitchBar percent={Math.min(100, Math.round((todayPages / DAILY_PAGES_GOAL) * 100))} />
+            <StitchBar percent={Math.min(100, Math.round((todayPages / todayGoal) * 100))} />
           </div>
         </div>
 
         <Link
           href="/settings"
-          className="flex h-12 items-center justify-center gap-2 rounded-md border-[1.5px] border-dashed border-stitch font-serif text-sm text-text lg:hover:bg-surface-2"
+          aria-current={pathname === "/settings" ? "page" : undefined}
+          className={`flex h-12 items-center justify-center gap-2 rounded-md border-[1.5px] font-serif text-sm ${
+            pathname === "/settings"
+              ? "border-line bg-surface font-bold text-accent"
+              : "border-dashed border-stitch text-text lg:hover:bg-surface-2"
+          }`}
         >
           <Icon name="settings" width={20} height={20} />
           {t.home.settings}

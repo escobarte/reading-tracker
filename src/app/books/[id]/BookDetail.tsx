@@ -14,12 +14,14 @@ import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { StatTile } from "@/components/ui/StatTile";
 import { StitchBar } from "@/components/ui/StitchBar";
+import { DeadlineDialog } from "@/components/goals/DeadlineDialog";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount } from "@/i18n/plural";
-import { formatHoursMinutes } from "@/lib/time";
+import { formatDeadlineDayMonth, formatHoursMinutes } from "@/lib/time";
 import type { Book, BookShelf, ReadingSession } from "@/lib/db/types";
 import type { ReadingStats } from "@/lib/db/sessions";
+import type { DeadlineCardData } from "@/lib/db/goals";
 import { continueLastReadingAction, deleteBookAction, moveShelfAction } from "./actions";
 
 type BookDetailProps = {
@@ -27,9 +29,11 @@ type BookDetailProps = {
   currentPage: number;
   stats: ReadingStats | null;
   sessions: ReadingSession[];
+  readingId: string | null;
+  deadline: DeadlineCardData | null;
 };
 
-export function BookDetail({ book: initialBook, currentPage, stats, sessions }: BookDetailProps) {
+export function BookDetail({ book: initialBook, currentPage, stats, sessions, readingId, deadline }: BookDetailProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,6 +41,8 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
   const [book, setBook] = useState(initialBook);
   const [, startTransition] = useTransition();
   const [rereadDialogOpen, setRereadDialogOpen] = useState(false);
+  const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
+  const canSetDeadline = Boolean(readingId && book.total_pages);
 
   const shelfLabels: Record<BookShelf, string> = {
     reading: t.library.shelfReading,
@@ -201,10 +207,61 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
 
           <div className="grid gap-4 lg:grid-cols-2">
             <GoalCard>
-              <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-deadline">
-                {t.book.deadlineTitle}
-              </p>
-              <p className="font-serif text-lg text-muted">{t.book.deadlineEmpty}</p>
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <p className="font-mono text-xs uppercase tracking-[0.1em] text-deadline">{t.book.deadlineTitle}</p>
+                {canSetDeadline && (
+                  <button
+                    type="button"
+                    onClick={() => setDeadlineDialogOpen(true)}
+                    className="shrink-0 rounded-lg border-[1.5px] border-dashed border-stitch bg-surface px-4 py-2 font-serif text-sm text-text"
+                  >
+                    {deadline ? t.book.edit : t.book.deadlineSetButton}
+                  </button>
+                )}
+              </div>
+
+              {!canSetDeadline ? (
+                <p className="font-serif text-lg text-muted">{t.book.deadlineNoReading}</p>
+              ) : !deadline ? (
+                <p className="font-serif text-lg text-muted">{t.book.deadlineNotSet}</p>
+              ) : deadline.status === "expired" ? (
+                <p className="font-serif text-lg text-deadline">{t.book.deadlineExpired}</p>
+              ) : (
+                <>
+                  <p className="font-serif text-xl font-bold text-text">
+                    {formatTemplate(t.book.deadlineUntil, { date: formatDeadlineDayMonth(deadline.dueDate, locale) })}
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-muted">
+                    {formatTemplate(t.book.deadlineSubline, {
+                      norm: deadline.normPerDay,
+                      pagesUnit: t.book.pagesUnit,
+                      days: formatCount(deadline.totalDaysInPeriod, "day", locale),
+                    })}
+                  </p>
+                  <div className="mt-2">
+                    {deadline.isReadingDay ? (
+                      <Chip variant={deadline.status === "on-track" ? "ok" : "default"}>
+                        {deadline.status === "on-track"
+                          ? t.book.deadlineOnTrack
+                          : formatTemplate(t.book.deadlineBehind, {
+                              pages: deadline.normPerDay - deadline.doneToday,
+                              pagesUnit: t.book.pagesUnit,
+                            })}
+                      </Chip>
+                    ) : (
+                      <Chip>{t.book.deadlineNotReadingDay}</Chip>
+                    )}
+                  </div>
+                  {deadline.tomorrowWarningNorm != null && (
+                    <p className="mt-2 font-serif text-sm italic text-muted">
+                      {formatTemplate(t.book.deadlineWarning, {
+                        pages: deadline.tomorrowWarningNorm,
+                        pagesUnit: t.book.pagesUnit,
+                      })}
+                    </p>
+                  )}
+                </>
+              )}
             </GoalCard>
 
             <div className="rounded-xl border border-line bg-surface p-4 lg:p-5">
@@ -243,6 +300,19 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions }: 
           </section>
         </div>
       </div>
+
+      {canSetDeadline && readingId && (
+        <DeadlineDialog
+          open={deadlineDialogOpen}
+          onClose={() => setDeadlineDialogOpen(false)}
+          bookId={book.id}
+          readingId={readingId}
+          bookTitle={book.title}
+          totalPages={book.total_pages ?? 0}
+          currentPage={currentPage}
+          initial={deadline ? { dueDateKey: deadline.dueDate, skipWeekdays: deadline.skipWeekdays } : null}
+        />
+      )}
 
       <Modal
         open={rereadDialogOpen}

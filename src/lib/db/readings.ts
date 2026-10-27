@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { localYear } from "@/lib/time";
 import { setShelf } from "./books";
 import type { Reading } from "./types";
 
@@ -28,6 +29,18 @@ export async function getLatestReading(bookId: string): Promise<Reading | null> 
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+/** Число прочтений, закрытых в текущем календарном году (Europe/Bucharest) — для годовой цели. */
+export async function getFinishedThisYearCount(): Promise<number> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("readings").select("finished_at").not("finished_at", "is", null);
+  if (error) throw error;
+
+  const currentYear = localYear(new Date());
+  return (data ?? []).filter(
+    (reading) => reading.finished_at && localYear(reading.finished_at) === currentYear,
+  ).length;
 }
 
 export async function getReading(id: string): Promise<Reading | null> {
