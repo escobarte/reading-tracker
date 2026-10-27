@@ -56,7 +56,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-2 grid grid-cols-2 gap-3 lg:order-2 lg:col-span-1 lg:flex lg:flex-col">
-          <Card>
+          <Card className="lg:flex lg:flex-1 lg:flex-col lg:justify-center">
             <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.home.todayTitle}</p>
             <div className="mt-2 flex items-center justify-center">
               <StitchRing percent={todayPercent} size="sm">
@@ -74,7 +74,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
             </p>
           </Card>
 
-          <Card>
+          <Card className="lg:flex lg:flex-1 lg:flex-col lg:justify-center">
             <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.home.streakTitle}</p>
             <p className="mt-2 text-center font-mono text-[34px] leading-none text-text">{data.streak}</p>
             <p className="mt-2 text-center font-mono text-xs text-muted">
@@ -91,7 +91,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-5 lg:order-4 lg:col-span-1">
-          <Card>
+          <Card className="h-full">
             <div className="mb-2 flex items-center justify-between">
               <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.home.weekTitle}</p>
               <p className="font-mono text-xs text-muted">
@@ -114,7 +114,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-6 lg:order-5 lg:col-span-1">
-          <Card>
+          <Card className="h-full">
             <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.home.yearTitle}</p>
             <p className="font-mono text-[34px] leading-none text-text">
               {data.year.finishedCount}
@@ -130,7 +130,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-4 lg:order-6 lg:col-span-2">
-          <section className="rounded-xl border border-line bg-surface p-4 lg:p-5">
+          <section className="h-full rounded-xl border border-line bg-surface p-4 lg:p-5">
             <div className="mb-2 flex items-center justify-between">
               <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.home.queueTitle}</p>
               {data.queue.length > 0 && (
@@ -163,7 +163,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-8 lg:order-7 lg:col-span-1">
-          <section className="rounded-xl border border-line bg-surface p-4 lg:p-5">
+          <section className="h-full rounded-xl border border-line bg-surface p-4 lg:p-5">
             <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.home.recentTitle}</p>
             {data.recent.length > 0 ? (
               <CoverRow items={data.recent} hrefFor={(id) => `/books/${id}`} />

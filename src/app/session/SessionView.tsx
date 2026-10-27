@@ -313,6 +313,13 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
           <span className="h-2 w-2 rounded-full bg-accent" aria-hidden="true" />
           {t.session.live}
         </p>
+        <Link
+          href="/"
+          aria-label={t.nav.home}
+          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-stitch bg-surface text-text"
+        >
+          <Icon name="home" />
+        </Link>
       </div>
 
       <div className="flex items-center gap-4 pb-6">

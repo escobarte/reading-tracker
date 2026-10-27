@@ -87,6 +87,7 @@ export function HeroCarousel({ books }: { books: HomeReadingBook[] }) {
         if (event.key === "ArrowRight") scrollToIndex(activeIndex + 1);
         if (event.key === "ArrowLeft") scrollToIndex(activeIndex - 1);
       }}
+      className="lg:flex lg:h-full lg:flex-col"
     >
       <div className="mb-2 flex items-center justify-between">
         <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.home.readingTitle}</p>
@@ -97,7 +98,7 @@ export function HeroCarousel({ books }: { books: HomeReadingBook[] }) {
         )}
       </div>
 
-      <div className="relative">
+      <div className="relative lg:flex-1">
         {books.length > 1 && (
           <>
             <button
@@ -124,7 +125,7 @@ export function HeroCarousel({ books }: { books: HomeReadingBook[] }) {
         <div
           ref={trackRef}
           tabIndex={0}
-          className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 [&::-webkit-scrollbar]:hidden"
+          className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth outline-none focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 lg:h-full [&::-webkit-scrollbar]:hidden"
           style={{ scrollbarWidth: "none" }}
         >
           {books.map((book) => (
@@ -177,7 +178,7 @@ function HeroSlide({
   const remainingPages = book.totalPages ? Math.max(0, book.totalPages - book.currentPage) : null;
 
   return (
-    <HeroCard>
+    <HeroCard className="lg:h-full">
       <Link href={`/books/${book.id}`} className="flex gap-4">
         <Cover title={book.title} coverUrl={book.coverUrl ?? undefined} size="hero" />
         <div className="min-w-0 flex-1">
@@ -206,6 +207,8 @@ function HeroSlide({
           {formatTemplate(t.book.progressRemaining, { pages: remainingPages })}
         </p>
       )}
+
+      <div aria-hidden="true" className="hidden lg:block lg:flex-1" />
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         {isSessionActive && activeSession ? (

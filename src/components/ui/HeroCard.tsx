@@ -30,7 +30,7 @@ export function HeroCard({ className = "", children, ...props }: HTMLAttributes<
           />
         ),
       )}
-      <div className="relative">{children}</div>
+      <div className="relative lg:flex lg:h-full lg:flex-col">{children}</div>
     </div>
   );
 }

@@ -17,7 +17,7 @@ type CoverRowProps = {
 
 export function CoverRow({ items, hrefFor, badgeLabel }: CoverRowProps) {
   return (
-    <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+    <div className="-mx-1.5 -mt-1.5 flex gap-3 overflow-x-auto px-1.5 pb-6 pt-1.5">
       {items.map((item) => (
         <Link key={item.id} href={hrefFor(item.id)} className="flex w-[100px] shrink-0 flex-col gap-1.5">
           <div className="relative">
