@@ -23,6 +23,8 @@
 2. После этого каждый push в `main` обновляет основной сайт, каждый push в другую ветку создаёт превью-адрес (Deployments → строка ветки → Visit).
 3. **Deployment Protection (сделано в Фазе 2).** Превью-адреса веток по умолчанию закрыты входом в Vercel: на компьютере, где ты вошёл в Vercel, всё открывается, а на телефоне появляется «Log in to Vercel». Чтобы превью открывалось на телефоне, на компьютере: проект → Settings → Deployment Protection → **Vercel Authentication** выключить → Save. Основной адрес этой защитой не закрыт.
 
+**Регион функций (важно для скорости).** Vercel → Settings → Functions → Function Region → Europe, регион рядом с Supabase (у нас Supabase в `eu-west-1`, Ирландия; ближайшие Dublin `dub1` и London `lhr1`). По умолчанию функции стоят в США (`iad1`), тогда каждый запрос к базе идёт через океан и клик отвечает 2–3 секунды. Настройка действует только на новые деплои.
+
 ## 3. Supabase (сделано в Фазе 2)
 
 **Проект**
@@ -43,6 +45,35 @@
 
 **Забыл пароль**
 Восстановления по почте в приложении нет. Сброс вручную: Authentication → Users → строка пользователя → меню «…» → Send password recovery / Reset password, либо удалить пользователя и создать заново (данные привязаны к пользователю, удалять только если база пустая).
+
+## 3.1 Вход через Google (сделано 2026-10-27, ветка `feat/google-auth`)
+
+Google привязывается к существующему пользователю Supabase по совпадению почты. Регистрация новых пользователей остаётся закрытой, поэтому войти через Google может только владелец.
+
+**Если почта пользователя в Supabase не совпадает с Google-аккаунтом**, поменять её (UID и все данные сохраняются), SQL Editor:
+```sql
+update auth.users set email = 'НОВАЯ_ПОЧТА' where email = 'СТАРАЯ_ПОЧТА';
+update auth.identities
+set identity_data = jsonb_set(identity_data, '{email}', '"НОВАЯ_ПОЧТА"')
+where provider = 'email' and identity_data->>'email' = 'СТАРАЯ_ПОЧТА';
+```
+Вход по паролю после этого с новой почтой и прежним паролем.
+
+**Supabase: адреса.** Authentication → URL Configuration:
+- Site URL: `https://reading-tracker-one-steel.vercel.app`
+- Redirect URLs: `https://reading-tracker-one-steel.vercel.app/**`, `http://localhost:3000/**`, `https://reading-tracker-*-escobartes-projects.vercel.app/**` (превью веток).
+
+**Google Cloud** (проект `Reading Tracker`, тот же, что для ключа Books API; нужна двухэтапная аутентификация на аккаунте):
+1. Поиск → **Google Auth Platform** → Get started: App name `Reading Tracker`, support email, Audience **External**, contact email, согласие, Create.
+2. Audience → Test users → Add users: почта владельца. Публиковать приложение не нужно: в режиме **Testing** войти могут только тестовые пользователи.
+3. Clients → Create client: Web application, Authorized redirect URI = Callback URL из Supabase (`https://<project-ref>.supabase.co/auth/v1/callback`; Supabase → Authentication → Sign In / Providers → Google). Authorized JavaScript origins пустые.
+4. Client ID и Client secret показываются один раз: **Download JSON** и хранить вне репозитория.
+
+**Supabase: провайдер.** Authentication → Sign In / Providers → Google: Enable, вставить Client ID и Client Secret, Save. Остальные переключатели выключены.
+
+**Код.** Промпт «Вход через Google» в `PROMPTS.md`. Новых переменных окружения нет: Client ID и Secret хранятся только в Supabase.
+
+**Первый вход:** Google может показать «Google hasn't verified this app» (режим Testing). Нажать Advanced → Go to Reading Tracker → Continue.
 
 ## 4. Ключи
 
@@ -76,7 +107,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…
 3. Внизу должно быть **Success. No rows returned**. Красная ошибка означает, что что-то не выполнилось: скопировать текст ошибки и показать в штабе.
 4. Supabase → **Table Editor**: слева в списке должны появиться таблицы миграции (для `0001`: `books`, `readings`, `sessions`, `notes`, `goals`, `settings`).
 
-Выполнено: `0001_init.sql` (2026-10-22).
+Выполнено: `0001_init.sql` (2026-10-22), `0002_goals.sql` (2026-10-27, Фаза 6: дедлайн по книге).
 
 Проверка защиты (RLS включён на всех таблицах):
 ```
@@ -131,6 +162,8 @@ select tablename, rowsecurity from pg_tables where schemaname = 'public';
 | Сайт на Vercel не видит базу | переменные добавлены для нужной среды (Production или Preview), имена совпадают буква в букву, после добавления сделана новая сборка |
 | Превью-адрес ветки просит вход в Vercel (обычно на телефоне) | отключить Vercel Authentication в Settings → Deployment Protection |
 | Поиск книг ничего не находит или результаты бедные | Google Books отдаёт `429` при исчерпанной квоте, тогда работает запасной Open Library (без страниц). Проверить `GOOGLE_BOOKS_API_KEY` в Vercel, см. `guide-google-api.md`, раздел 8 |
+| После Google-входа возвращает на `/login?error=google` | почта Google-аккаунта не совпадает с почтой пользователя в Supabase (регистрация закрыта, новый пользователь не создаётся); почта не добавлена в Test users; в Supabase нет нужного Redirect URL; в Google другой Callback URL |
+| Google пишет «Access blocked» | почта не добавлена в Audience → Test users |
 | Таблицы пустые или ошибка прав | выполнен ли SQL-файл целиком; есть ли в нём `grant … to authenticated` |
 
 ## 8. Отложено

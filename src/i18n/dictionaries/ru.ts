@@ -236,7 +236,7 @@ const ru = {
     deadlineUntil: "до {date}",
     deadlineUntilMore: "{bookTitle} · до {date}, ещё {days}",
     deadlineSubline: "{norm} {pagesUnit} в день · {days}",
-    deadlineWarning: "Пропустишь день: завтра норма вырастет до {pages} {pagesUnit}.",
+    deadlineWarning: "Пропустишь день: завтра норма вырастет до {pages} {pagesUnit}",
     notesTitle: "Заметки",
     notesEmpty: "Скоро",
     historyTitle: "История чтения",

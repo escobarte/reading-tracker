@@ -92,14 +92,21 @@ export function computeDeadlineNorm(input: DeadlineComputationInput): DeadlineCo
 
   const normPerDay = remaining === 0 ? 0 : Math.ceil(remaining / readableDaysFromToday);
   const isReadingDay = !skipWeekdays.includes(weekdayOf(todayKey));
+  const todayNormMet = pagesReadToday >= normPerDay;
 
+  // Предупреждение считается по остатку на текущий момент (за вычетом уже
+  // прочитанного сегодня), а не по остатку на начало дня — иначе прочитанные
+  // сегодня страницы не уменьшали бы завтрашнюю норму в предупреждении.
+  const currentRemaining = Math.max(0, remaining - pagesReadToday);
   const tomorrowKey = addDays(todayKey, 1);
   const readableDaysFromTomorrow = countReadableDays(tomorrowKey, dueDateKey, skipWeekdays);
   const tomorrowWarningNorm =
-    remaining > 0 && readableDaysFromTomorrow > 0 ? Math.ceil(remaining / readableDaysFromTomorrow) : null;
+    !todayNormMet && isReadingDay && currentRemaining > 0 && readableDaysFromTomorrow > 0
+      ? Math.ceil(currentRemaining / readableDaysFromTomorrow)
+      : null;
 
   return {
-    status: pagesReadToday >= normPerDay ? "on-track" : "behind",
+    status: todayNormMet ? "on-track" : "behind",
     normPerDay,
     doneToday: pagesReadToday,
     remainingPages: remaining,
