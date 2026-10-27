@@ -2,17 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { buttonBaseClass, buttonVariantClasses } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { DAILY_PAGES_GOAL } from "@/lib/config";
+import { getTodayProgressAction } from "@/app/session/actions";
 import { NAV_ITEMS, isNavItemActive, type NavItem } from "./nav-items";
 
 export function Sidebar({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const { t } = useLocale();
+  const [todayPages, setTodayPages] = useState(0);
   const [logoLabel, ...logoTitleParts] = t.common.appName.split(" ");
   const logoTitle = logoTitleParts.join(" ");
+
+  useEffect(() => {
+    let cancelled = false;
+    getTodayProgressAction().then((progress) => {
+      if (!cancelled) setTodayPages(progress.pages);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   return (
     <aside
@@ -41,10 +55,13 @@ export function Sidebar({ className = "" }: { className?: string }) {
         <div className="rounded-xl border border-line bg-surface p-3.5">
           <p className="font-mono text-xs text-muted">{t.sidebar.today}</p>
           <p className="font-mono text-2xl text-text">
-            0 <span className="text-sm text-muted">{t.sidebar.pagesOf} 30 {t.sidebar.pagesUnit}</span>
+            {todayPages}{" "}
+            <span className="text-sm text-muted">
+              {t.sidebar.pagesOf} {DAILY_PAGES_GOAL} {t.sidebar.pagesUnit}
+            </span>
           </p>
           <div className="mt-2">
-            <StitchBar percent={0} />
+            <StitchBar percent={Math.min(100, Math.round((todayPages / DAILY_PAGES_GOAL) * 100))} />
           </div>
         </div>
 

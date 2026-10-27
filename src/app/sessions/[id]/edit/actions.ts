@@ -15,6 +15,7 @@ function revalidateBook(bookId: string) {
   revalidatePath(`/books/${bookId}`);
   revalidatePath(`/books/${bookId}/history`);
   revalidatePath("/library");
+  revalidatePath("/");
 }
 
 export async function updateSessionAction(

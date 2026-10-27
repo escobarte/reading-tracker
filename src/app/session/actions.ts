@@ -42,6 +42,7 @@ export async function prepareSessionAction(
 
   revalidatePath(`/books/${bookId}`);
   revalidatePath("/library");
+  revalidatePath("/");
 
   return { readingId: reading.id, startPage };
 }

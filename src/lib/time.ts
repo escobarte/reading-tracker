@@ -86,6 +86,31 @@ export function localDayRangeUtc(
   return { start, end: new Date(start.getTime() + 86400000) };
 }
 
+const WEEKDAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** UTC instant of local Monday midnight for the week containing `date`. */
+export function startOfLocalWeek(date: Date = new Date(), timeZone = APP_TIMEZONE): Date {
+  const dayStart = startOfLocalDay(date, timeZone);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(dayStart);
+  const index = WEEKDAY_ORDER.indexOf(weekday);
+  return new Date(dayStart.getTime() - Math.max(0, index) * 86400000);
+}
+
+/** [start, end) UTC instants bounding the local Mon–Sun week containing `date`. */
+export function localWeekRangeUtc(
+  date: Date = new Date(),
+  timeZone = APP_TIMEZONE,
+): { start: Date; end: Date } {
+  const start = startOfLocalWeek(date, timeZone);
+  return { start, end: new Date(start.getTime() + 7 * 86400000) };
+}
+
+/** Calendar year the given instant falls on, in `timeZone`. */
+export function localYear(date: Date | string = new Date(), timeZone = APP_TIMEZONE): number {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return Number(new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric" }).format(d));
+}
+
 /** Length of the longest run of consecutive local days (ending today or yesterday) present in `dateKeys`. */
 export function computeStreak(dateKeys: Set<string>, timeZone = APP_TIMEZONE): number {
   let cursor = new Date();
@@ -146,6 +171,26 @@ export function formatShortDate(date: Date | string, locale: "ru" | "en"): strin
     day: "numeric",
     month: "short",
   }).format(d);
+}
+
+/** Local hour of day (0–23) for the given instant, in `timeZone`. */
+export function localHour(date: Date = new Date(), timeZone = APP_TIMEZONE): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date),
+  );
+}
+
+/** "пятница · 23 октября" / "Friday · 23 October", for the home screen header. */
+export function formatHomeDate(date: Date | string, locale: "ru" | "en"): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const intlLocale = locale === "ru" ? "ru-RO" : "en-GB";
+  const weekday = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, weekday: "long" }).format(d);
+  const dayMonth = new Intl.DateTimeFormat(intlLocale, {
+    timeZone: APP_TIMEZONE,
+    day: "numeric",
+    month: "long",
+  }).format(d);
+  return `${weekday} · ${dayMonth}`;
 }
 
 /** Month + year for a group header, e.g. "Октябрь 2026" / "October 2026". */
