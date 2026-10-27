@@ -193,9 +193,19 @@ export function formatHomeDate(date: Date | string, locale: "ru" | "en"): string
   return `${weekday} · ${dayMonth}`;
 }
 
-/** Day + full month for a deadline date, e.g. "20 ноября" / "20 November". */
-export function formatDeadlineDayMonth(dateKey: string, locale: "ru" | "en"): string {
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Validates a "YYYY-MM-DD" deadline key and builds the UTC midnight `Date` for it, or `null` if invalid/empty. */
+function parseDateKeySafe(dateKey: string | null | undefined): Date | null {
+  if (!dateKey || !DATE_KEY_PATTERN.test(dateKey)) return null;
   const d = new Date(`${dateKey}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Day + full month for a deadline date, e.g. "20 ноября" / "20 November". Returns "—" for an empty/invalid key. */
+export function formatDeadlineDayMonth(dateKey: string, locale: "ru" | "en"): string {
+  const d = parseDateKeySafe(dateKey);
+  if (!d) return "—";
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RO" : "en-GB", {
     timeZone: APP_TIMEZONE,
     day: "numeric",
@@ -203,9 +213,10 @@ export function formatDeadlineDayMonth(dateKey: string, locale: "ru" | "en"): st
   }).format(d);
 }
 
-/** Day + full month + weekday for the deadline dialog, e.g. "20 ноября, пятница" / "20 November, Friday". */
+/** Day + full month + weekday for the deadline dialog, e.g. "20 ноября, пятница" / "20 November, Friday". Returns "—" for an empty/invalid key. */
 export function formatDeadlineWithWeekday(dateKey: string, locale: "ru" | "en"): string {
-  const d = new Date(`${dateKey}T00:00:00Z`);
+  const d = parseDateKeySafe(dateKey);
+  if (!d) return "—";
   const intlLocale = locale === "ru" ? "ru-RO" : "en-GB";
   const dayMonth = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, day: "numeric", month: "long" }).format(d);
   const weekday = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, weekday: "long" }).format(d);

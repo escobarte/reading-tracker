@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_DAILY_PAGES_GOAL, DEFAULT_YEAR_BOOKS_GOAL, computeDeadlineNorm, type DeadlineComputation } from "@/lib/goals";
 import { localDateKey, localDayRangeUtc } from "@/lib/time";
@@ -9,7 +10,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
-export async function getDailyPagesGoal(): Promise<number> {
+/** cache(): несколько компонентов одного запроса (layout, Sidebar, сама страница) читают дневную цель один раз. */
+export const getDailyPagesGoal = cache(async (): Promise<number> => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("goals")
@@ -18,7 +20,7 @@ export async function getDailyPagesGoal(): Promise<number> {
     .maybeSingle();
   if (error) throw error;
   return data?.target_value ?? DEFAULT_DAILY_PAGES_GOAL;
-}
+});
 
 export async function setDailyPagesGoal(value: number): Promise<number> {
   const clamped = clamp(value, DAILY_PAGES_RANGE.min, DAILY_PAGES_RANGE.max);

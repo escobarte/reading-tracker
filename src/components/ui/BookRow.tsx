@@ -66,6 +66,7 @@ export function BookRow({
     >
       <Link
         href={`/books/${book.id}`}
+        prefetch={false}
         draggable={false}
         onPointerDown={handlePointerDown}
         onClickCapture={handleClickCapture}

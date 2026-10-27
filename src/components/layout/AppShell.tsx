@@ -14,11 +14,14 @@ export function AppShell({
   children,
   variant = "default",
   footer,
+  today,
 }: {
   children?: ReactNode;
   variant?: AppShellVariant;
   /** "focused" only: заменяет BottomNav собственной нижней панелью (таймер сессии). */
   footer?: ReactNode;
+  /** Сегодняшний прогресс, уже прочитанный на сервере этой страницей — избавляет Sidebar от отдельного запроса. */
+  today?: { pages: number; goal: number };
 }) {
   if (variant === "bare") {
     return (
@@ -31,7 +34,7 @@ export function AppShell({
   if (variant === "sheet") {
     return (
       <div className="mx-auto flex h-dvh max-w-[480px] flex-col lg:mx-0 lg:max-w-none lg:flex-row">
-        <Sidebar />
+        <Sidebar initialToday={today} />
         <div className="flex-1 overflow-y-auto overscroll-y-none">
           <main className="px-5 pb-10 pt-[max(20px,env(safe-area-inset-top))] lg:px-10 lg:pb-10 lg:pt-8">
             <div className="mx-auto max-w-[480px] lg:max-w-[1200px]">{children}</div>
@@ -58,7 +61,7 @@ export function AppShell({
 
   return (
     <div className="mx-auto flex h-dvh max-w-[480px] flex-col lg:mx-0 lg:max-w-none lg:flex-row">
-      <Sidebar />
+      <Sidebar initialToday={today} />
       <div className="flex-1 overflow-y-auto overscroll-y-none">
         <main className="px-5 pt-[max(20px,env(safe-area-inset-top))] lg:px-10 lg:pb-10 lg:pt-8">
           <div className={`mx-auto ${containerByVariant[variant]}`}>{children}</div>

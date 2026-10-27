@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { computeStreak, localDateKey, localDayRangeUtc } from "@/lib/time";
 import { setShelf } from "./books";
@@ -97,6 +98,20 @@ export async function deleteSession(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** page_to of the latest session of a reading, or 0 if there is none. */
+export async function getMaxPageForReading(readingId: string): Promise<number> {
+  const supabase = await createClient();
+  const { data: session, error: sessionError } = await supabase
+    .from("sessions")
+    .select("page_to")
+    .eq("reading_id", readingId)
+    .order("page_to", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  if (sessionError) throw sessionError;
+  return session?.page_to ?? 0;
+}
+
 /** page_to of the latest session of the book's open reading, or 0 if there is none. */
 export async function getCurrentPage(bookId: string): Promise<number> {
   const supabase = await createClient();
@@ -110,15 +125,7 @@ export async function getCurrentPage(bookId: string): Promise<number> {
   if (readingError) throw readingError;
   if (!reading) return 0;
 
-  const { data: session, error: sessionError } = await supabase
-    .from("sessions")
-    .select("page_to")
-    .eq("reading_id", reading.id)
-    .order("page_to", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  if (sessionError) throw sessionError;
-  return session?.page_to ?? 0;
+  return getMaxPageForReading(reading.id);
 }
 
 export type SyncResult = { justFinished: boolean; needsRevertConfirm: boolean };
@@ -200,7 +207,8 @@ export async function getReadingStats(readingId: string): Promise<ReadingStats> 
 
 export type TodaySummary = { pages: number; minutes: number; sessionCount: number };
 
-export async function getTodaySummary(): Promise<TodaySummary> {
+/** cache(): несколько компонентов одного запроса (layout, Sidebar, сама страница) читают сводку за сегодня один раз. */
+export const getTodaySummary = cache(async (): Promise<TodaySummary> => {
   const supabase = await createClient();
   const { start, end } = localDayRangeUtc();
   const { data, error } = await supabase
@@ -214,7 +222,7 @@ export async function getTodaySummary(): Promise<TodaySummary> {
   const pages = sessions.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
   const seconds = sessions.reduce((sum, s) => sum + (s.seconds ?? 0), 0);
   return { pages, minutes: Math.round(seconds / 60), sessionCount: sessions.length };
-}
+});
 
 export async function getStreakDays(): Promise<number> {
   const supabase = await createClient();

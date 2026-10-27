@@ -11,26 +11,33 @@ import { DEFAULT_DAILY_PAGES_GOAL } from "@/lib/goals";
 import { getTodayProgressAction } from "@/app/session/actions";
 import { NAV_ITEMS, isNavItemActive, type NavItem } from "./nav-items";
 
-export function Sidebar({ className = "" }: { className?: string }) {
+export function Sidebar({
+  className = "",
+  initialToday,
+}: {
+  className?: string;
+  /** Передано страницей, которая уже прочитала эти данные на сервере — тогда свой запрос не нужен. */
+  initialToday?: { pages: number; goal: number };
+}) {
   const pathname = usePathname();
   const { t } = useLocale();
-  const [todayPages, setTodayPages] = useState(0);
-  const [todayGoal, setTodayGoal] = useState(DEFAULT_DAILY_PAGES_GOAL);
+  const [fetched, setFetched] = useState<{ pages: number; goal: number } | null>(null);
   const [logoLabel, ...logoTitleParts] = t.common.appName.split(" ");
   const logoTitle = logoTitleParts.join(" ");
+  const todayPages = initialToday?.pages ?? fetched?.pages ?? 0;
+  const todayGoal = initialToday?.goal ?? fetched?.goal ?? DEFAULT_DAILY_PAGES_GOAL;
 
   useEffect(() => {
+    // Страница уже прочитала эти данные на сервере — свой запрос не нужен.
+    if (initialToday) return;
     let cancelled = false;
     getTodayProgressAction().then((progress) => {
-      if (!cancelled) {
-        setTodayPages(progress.pages);
-        setTodayGoal(progress.goal);
-      }
+      if (!cancelled) setFetched({ pages: progress.pages, goal: progress.goal });
     });
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, initialToday]);
 
   return (
     <aside

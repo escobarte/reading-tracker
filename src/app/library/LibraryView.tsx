@@ -45,7 +45,13 @@ function parseSort(value: string | null): SortMode {
   return value === "title" || value === "author" ? value : "queue";
 }
 
-export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
+export function LibraryView({
+  initialBooks,
+  today,
+}: {
+  initialBooks: Book[];
+  today: { pages: number; goal: number };
+}) {
   const { t, locale } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -185,7 +191,7 @@ export function LibraryView({ initialBooks }: { initialBooks: Book[] }) {
   }
 
   return (
-    <AppShell>
+    <AppShell today={today}>
       <header className="flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.14em] text-accent">{t.common.appName}</p>

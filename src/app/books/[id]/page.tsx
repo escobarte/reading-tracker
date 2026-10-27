@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { getBook } from "@/lib/db/books";
-import { getDeadlineForReading } from "@/lib/db/goals";
+import { getDailyPagesGoal, getDeadlineForReading } from "@/lib/db/goals";
 import { getLatestReading } from "@/lib/db/readings";
-import { getCurrentPage, getReadingStats, listRecentSessions } from "@/lib/db/sessions";
+import { getMaxPageForReading, getReadingStats, getTodaySummary, listRecentSessions } from "@/lib/db/sessions";
 import { BookDetail } from "./BookDetail";
 
 export default async function BookPage({ params }: PageProps<"/books/[id]">) {
@@ -11,13 +11,15 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
   if (!book) notFound();
 
   const reading = await getLatestReading(id);
-  const openReading = reading && !reading.finished_at ? reading : null;
+  const openReading = reading && !reading.finished_at && book.shelf === "reading" ? reading : null;
 
-  const [currentPage, stats, sessions, deadline] = await Promise.all([
-    getCurrentPage(id),
+  const [currentPage, stats, sessions, deadline, goal, today] = await Promise.all([
+    reading ? getMaxPageForReading(reading.id) : Promise.resolve(0),
     reading ? getReadingStats(reading.id) : Promise.resolve(null),
     reading ? listRecentSessions(reading.id, 5) : Promise.resolve([]),
     openReading && book.total_pages ? getDeadlineForReading(openReading.id, book.total_pages) : Promise.resolve(null),
+    getDailyPagesGoal(),
+    getTodaySummary(),
   ]);
 
   return (
@@ -28,6 +30,7 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
       sessions={sessions}
       readingId={openReading?.id ?? null}
       deadline={deadline}
+      today={{ pages: today.pages, goal }}
     />
   );
 }

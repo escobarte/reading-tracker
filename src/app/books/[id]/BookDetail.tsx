@@ -31,9 +31,18 @@ type BookDetailProps = {
   sessions: ReadingSession[];
   readingId: string | null;
   deadline: DeadlineCardData | null;
+  today: { pages: number; goal: number };
 };
 
-export function BookDetail({ book: initialBook, currentPage, stats, sessions, readingId, deadline }: BookDetailProps) {
+export function BookDetail({
+  book: initialBook,
+  currentPage,
+  stats,
+  sessions,
+  readingId,
+  deadline,
+  today,
+}: BookDetailProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -95,7 +104,7 @@ export function BookDetail({ book: initialBook, currentPage, stats, sessions, re
   const statAvgValue = stats?.avgSessionMinutes != null ? String(stats.avgSessionMinutes) : "—";
 
   return (
-    <AppShell>
+    <AppShell today={today}>
       <div className="flex items-center justify-between py-5">
         <button
           type="button"

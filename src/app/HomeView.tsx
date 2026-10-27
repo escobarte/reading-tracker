@@ -31,7 +31,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
   const weekTime = formatHoursMinutes(data.week.totalMinutes, t.book.hoursUnit, t.book.minutesUnit);
 
   return (
-    <AppShell>
+    <AppShell today={{ pages: data.today.pages, goal: data.today.goal }}>
       <header className="flex items-start justify-between gap-3 py-5">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.14em] text-accent lg:hidden">

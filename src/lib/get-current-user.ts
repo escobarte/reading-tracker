@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthProvider = "google" | "email";
@@ -9,7 +10,8 @@ export type CurrentUser = {
   provider: AuthProvider | null;
 };
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+/** cache(): если за один запрос текущего пользователя спрашивают несколько компонентов, JWT проверяется один раз. */
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
 
@@ -21,4 +23,4 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const rawProvider = claims.app_metadata?.provider;
   const provider: AuthProvider | null = rawProvider === "google" ? "google" : rawProvider === "email" ? "email" : null;
   return { id: claims.sub, email: claims.email ?? null, provider };
-}
+});

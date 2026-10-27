@@ -23,6 +23,7 @@ type SettingsViewProps = {
   finishedThisYear: number;
   email: string | null;
   provider: "google" | "email" | null;
+  today: { pages: number; goal: number };
 };
 
 /** Клон значения с debounce-сохранением на сервере ~600 мс после последнего изменения. */
@@ -50,7 +51,7 @@ function useDebouncedGoal(
   return [value, change];
 }
 
-export function SettingsView({ dailyGoal, yearGoal, finishedThisYear, email, provider }: SettingsViewProps) {
+export function SettingsView({ dailyGoal, yearGoal, finishedThisYear, email, provider, today }: SettingsViewProps) {
   const { t, locale, setLocale } = useLocale();
   const { theme, setTheme } = useTheme();
 
@@ -58,7 +59,7 @@ export function SettingsView({ dailyGoal, yearGoal, finishedThisYear, email, pro
   const [yearBooks, setYearBooks] = useDebouncedGoal(yearGoal, YEAR_RANGE, setYearlyBooksGoalAction);
 
   return (
-    <AppShell variant="narrow">
+    <AppShell variant="narrow" today={today}>
       <PageHeader
         title={t.settings.title}
         action={

@@ -10,6 +10,12 @@ const en: Dictionary = {
     cancel: "Cancel",
     lessThanMinute: "< 1 min",
   },
+  errorBoundary: {
+    title: "Something went wrong",
+    message: "This page couldn't load. Try again or go back.",
+    retry: "Retry",
+    back: "Back",
+  },
   nav: {
     home: "Home",
     library: "Library",
