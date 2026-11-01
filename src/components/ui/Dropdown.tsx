@@ -5,7 +5,10 @@ import { Icon } from "./Icon";
 
 export type DropdownItem = {
   label: string;
-  onSelect: () => void;
+  /** Обычный пункт меню. Не задавайте вместе с `href`. */
+  onSelect?: () => void;
+  /** Пункт-ссылка (например, скачивание файла) — рендерится как `<a>`, обычная навигация браузера. */
+  href?: string;
   active?: boolean;
   variant?: "default" | "danger";
 };
@@ -71,28 +74,33 @@ export function Dropdown({
             align === "right" ? "right-0" : "left-0"
           }`}
         >
-          {items.map((item) => (
-            <li key={item.label}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={item.active}
-                onClick={() => {
-                  item.onSelect();
-                  setOpen(false);
-                }}
-                className={`flex min-h-11 w-full items-center whitespace-nowrap px-3 py-2.5 text-left font-serif text-sm transition-colors hover:bg-surface-2 ${
-                  item.variant === "danger"
-                    ? "text-deadline"
-                    : item.active
-                      ? "font-bold text-accent"
-                      : "text-text"
-                }`}
-              >
-                {item.label}
-              </button>
-            </li>
-          ))}
+          {items.map((item) => {
+            const itemClassName = `flex min-h-11 w-full items-center whitespace-nowrap px-3 py-2.5 text-left font-serif text-sm transition-colors hover:bg-surface-2 ${
+              item.variant === "danger" ? "text-deadline" : item.active ? "font-bold text-accent" : "text-text"
+            }`;
+            return (
+              <li key={item.label}>
+                {item.href ? (
+                  <a href={item.href} role="option" aria-selected={item.active} onClick={() => setOpen(false)} className={itemClassName}>
+                    {item.label}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={item.active}
+                    onClick={() => {
+                      item.onSelect?.();
+                      setOpen(false);
+                    }}
+                    className={itemClassName}
+                  >
+                    {item.label}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

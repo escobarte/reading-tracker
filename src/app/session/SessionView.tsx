@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { StitchRing } from "@/components/ui/StitchRing";
+import { NoteEditorDialog } from "@/components/notes/NoteEditorDialog";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { DEFAULT_DAILY_PAGES_GOAL } from "@/lib/goals";
@@ -43,6 +44,7 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
   const [todayPages, setTodayPages] = useState(0);
   const [todayGoal, setTodayGoal] = useState(DEFAULT_DAILY_PAGES_GOAL);
   const [now, setNow] = useState(() => Date.now());
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
 
   const resolveBook = useCallback(
     async (bookId: string): Promise<Book | null> => {
@@ -361,21 +363,37 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
       </p>
 
       <div className="grid grid-cols-2 gap-3">
-        <Link
-          href="/notes"
+        <button
+          type="button"
+          onClick={() => setNoteDialogOpen(true)}
           className="inline-flex h-14 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-base text-text"
         >
           <Icon name="quote" width={20} height={20} />
           {t.session.addQuote}
-        </Link>
-        <Link
-          href="/notes"
-          className="inline-flex h-14 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-base text-text"
-        >
-          <Icon name="camera" width={20} height={20} />
-          {t.session.addPhoto}
-        </Link>
+        </button>
+        <div className="relative">
+          <button
+            type="button"
+            disabled
+            className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-base text-text opacity-50"
+          >
+            <Icon name="camera" width={20} height={20} />
+            {t.session.addPhoto}
+          </button>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-2 right-2 rounded-full border border-dashed border-stitch bg-surface px-2 py-0.5 font-mono text-[10px] text-muted"
+          >
+            {t.common.soon}
+          </span>
+        </div>
       </div>
+
+      <NoteEditorDialog
+        open={noteDialogOpen}
+        onClose={() => setNoteDialogOpen(false)}
+        trigger={{ mode: "add", defaultBookId: book.id }}
+      />
     </AppShell>
   );
 }

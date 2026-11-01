@@ -15,12 +15,15 @@ import { Modal } from "@/components/ui/Modal";
 import { StatTile } from "@/components/ui/StatTile";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { DeadlineDialog } from "@/components/goals/DeadlineDialog";
+import { NoteCard } from "@/components/notes/NoteCard";
+import { NoteEditorDialog, type NoteEditorTrigger } from "@/components/notes/NoteEditorDialog";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount } from "@/i18n/plural";
 import { formatDeadlineDayMonth, formatHoursMinutes, localDateKey } from "@/lib/time";
 import { forecastFinishDate } from "@/lib/stats";
-import type { Book, BookShelf, ReadingSession } from "@/lib/db/types";
+import { toggleNoteFavoriteAction } from "@/app/notes/actions";
+import type { Book, BookShelf, Note, ReadingSession } from "@/lib/db/types";
 import type { ReadingStats } from "@/lib/db/sessions";
 import type { DeadlineCardData } from "@/lib/db/goals";
 import { continueLastReadingAction, deleteBookAction, moveShelfAction } from "./actions";
@@ -34,6 +37,8 @@ type BookDetailProps = {
   deadline: DeadlineCardData | null;
   today: { pages: number; goal: number };
   pace: number;
+  notesCount: number;
+  recentNotes: Note[];
 };
 
 export function BookDetail({
@@ -45,6 +50,8 @@ export function BookDetail({
   deadline,
   today,
   pace,
+  notesCount,
+  recentNotes,
 }: BookDetailProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -54,7 +61,23 @@ export function BookDetail({
   const [, startTransition] = useTransition();
   const [rereadDialogOpen, setRereadDialogOpen] = useState(false);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [noteTrigger, setNoteTrigger] = useState<NoteEditorTrigger | null>(null);
   const canSetDeadline = Boolean(readingId && book.total_pages);
+
+  function openAddNote() {
+    setNoteTrigger({ mode: "add", defaultBookId: book.id });
+    setNoteDialogOpen(true);
+  }
+  function openEditNote(note: Note) {
+    setNoteTrigger({ mode: "edit", note });
+    setNoteDialogOpen(true);
+  }
+  function handleToggleFavorite(note: Note) {
+    startTransition(() => {
+      toggleNoteFavoriteAction(note.id, !note.is_favorite, note.book_id).then(() => router.refresh());
+    });
+  }
 
   const shelfLabels: Record<BookShelf, string> = {
     reading: t.library.shelfReading,
@@ -289,10 +312,48 @@ export function BookDetail({
             </GoalCard>
 
             <div className="rounded-xl border border-line bg-surface p-4 lg:p-5">
-              <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">
-                {t.book.notesTitle}
-              </p>
-              <p className="font-serif text-lg text-muted">{t.book.notesEmpty}</p>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">
+                  {formatTemplate(t.book.notesTitle, { count: notesCount })}
+                </p>
+                {notesCount > 0 && (
+                  <Link
+                    href={`/notes?book=${book.id}`}
+                    className="font-mono text-xs text-muted underline-offset-4 hover:underline"
+                  >
+                    {t.book.notesAllLink}
+                  </Link>
+                )}
+              </div>
+              {recentNotes.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={openAddNote}
+                  className="flex h-12 w-full items-center justify-center rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-sm text-text"
+                >
+                  {t.book.notesAddButton}
+                </button>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {recentNotes.map((note) => (
+                    <NoteCard
+                      key={note.id}
+                      type={note.type}
+                      typeLabel={
+                        note.type === "quote" ? t.notes.typeQuote : note.type === "word" ? t.notes.typeWord : t.notes.typeThought
+                      }
+                      body={note.body}
+                      meaning={note.meaning}
+                      caption={note.page != null ? formatTemplate(t.book.notePageCaption, { page: note.page }) : null}
+                      isFavorite={note.is_favorite}
+                      favoriteLabel={note.is_favorite ? t.notes.favoriteOn : t.notes.favoriteOff}
+                      tags={note.tags}
+                      onOpen={() => openEditNote(note)}
+                      onToggleFavorite={() => handleToggleFavorite(note)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -356,6 +417,14 @@ export function BookDetail({
           </Button>
         </div>
       </Modal>
+
+      <NoteEditorDialog
+        open={noteDialogOpen}
+        onClose={() => setNoteDialogOpen(false)}
+        trigger={noteTrigger}
+        onSaved={() => router.refresh()}
+        onDeleted={() => router.refresh()}
+      />
     </AppShell>
   );
 }

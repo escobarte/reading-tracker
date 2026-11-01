@@ -4,6 +4,7 @@ import { getDailyPagesGoal, getDeadlineForReading } from "@/lib/db/goals";
 import { getLatestReading } from "@/lib/db/readings";
 import { getMaxPageForReading, getReadingStats, getTodaySummary, listRecentSessions } from "@/lib/db/sessions";
 import { getRecentPace } from "@/lib/db/stats";
+import { getNotesCountForBook, listRecentNotesForBook } from "@/lib/db/notes";
 import { BookDetail } from "./BookDetail";
 
 export default async function BookPage({ params }: PageProps<"/books/[id]">) {
@@ -14,7 +15,7 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
   const reading = await getLatestReading(id);
   const openReading = reading && !reading.finished_at && book.shelf === "reading" ? reading : null;
 
-  const [currentPage, stats, sessions, deadline, goal, today, pace] = await Promise.all([
+  const [currentPage, stats, sessions, deadline, goal, today, pace, notesCount, recentNotes] = await Promise.all([
     reading ? getMaxPageForReading(reading.id) : Promise.resolve(0),
     reading ? getReadingStats(reading.id) : Promise.resolve(null),
     reading ? listRecentSessions(reading.id, 5) : Promise.resolve([]),
@@ -22,6 +23,8 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
     getDailyPagesGoal(),
     getTodaySummary(),
     openReading ? getRecentPace(openReading.id) : Promise.resolve(0),
+    getNotesCountForBook(id),
+    listRecentNotesForBook(id, 2),
   ]);
 
   return (
@@ -34,6 +37,8 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
       deadline={deadline}
       today={{ pages: today.pages, goal }}
       pace={pace}
+      notesCount={notesCount}
+      recentNotes={recentNotes}
     />
   );
 }

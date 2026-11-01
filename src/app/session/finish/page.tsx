@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { Stepper } from "@/components/ui/Stepper";
+import { NoteEditorDialog } from "@/components/notes/NoteEditorDialog";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount } from "@/i18n/plural";
@@ -36,6 +37,7 @@ export default function SessionFinishPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [now] = useState(() => Date.now());
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,13 +206,20 @@ export default function SessionFinishPage() {
         </div>
       </div>
 
-      <Link
-        href="/notes"
+      <button
+        type="button"
+        onClick={() => setNoteDialogOpen(true)}
         className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-sm text-text"
       >
         <Icon name="plus" width={18} height={18} />
         {t.sessionFinish.addNoteLink}
-      </Link>
+      </button>
+
+      <NoteEditorDialog
+        open={noteDialogOpen}
+        onClose={() => setNoteDialogOpen(false)}
+        trigger={{ mode: "add", defaultBookId: book.id }}
+      />
 
       <div className="mt-6 flex items-center justify-between">
         <p className="flex items-center gap-1.5 font-mono text-sm text-ok">

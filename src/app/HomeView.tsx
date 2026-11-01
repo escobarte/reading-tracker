@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -10,6 +12,8 @@ import { YearSpines } from "@/components/ui/YearSpines";
 import { CoverRow } from "@/components/home/CoverRow";
 import { DeadlineSection } from "@/components/home/DeadlineSection";
 import { HeroCarousel } from "@/components/home/HeroCarousel";
+import { NoteEditorDialog, type NoteEditorTrigger } from "@/components/notes/NoteEditorDialog";
+import { toggleNoteFavoriteAction } from "@/app/notes/actions";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { pluralWord } from "@/i18n/plural";
@@ -24,6 +28,26 @@ type HomeViewProps = {
 
 export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
   const { t, locale } = useLocale();
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+
+  const quote = data.quoteOfDay;
+  const quoteCaption = quote
+    ? quote.page != null
+      ? formatTemplate(t.home.quoteCaption, { book: quote.bookTitle, page: quote.page })
+      : formatTemplate(t.home.quoteCaptionNoPage, { book: quote.bookTitle })
+    : "";
+  const quoteTrigger: NoteEditorTrigger = quote
+    ? { mode: "edit", note: quote }
+    : { mode: "add", defaultBookId: data.reading[0]?.id ?? null };
+
+  function handleToggleQuoteFavorite() {
+    if (!quote) return;
+    startTransition(() => {
+      toggleNoteFavoriteAction(quote.id, !quote.is_favorite, quote.book_id).then(() => router.refresh());
+    });
+  }
 
   const todayPercent = data.today.goal > 0 ? Math.min(100, Math.round((data.today.pages / data.today.goal) * 100)) : 0;
   const todayGoalMet = data.today.pages >= data.today.goal;
@@ -171,12 +195,46 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-7 lg:order-8 lg:col-span-3">
-          <Card>
-            <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.home.quoteTitle}</p>
-            <p className="font-serif text-lg italic text-muted lg:text-2xl">{t.book.deadlineEmpty}</p>
-          </Card>
+          {quote ? (
+            <Card className="relative">
+              <button type="button" onClick={() => setQuoteDialogOpen(true)} className="block w-full pr-11 text-left">
+                <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.home.quoteTitle}</p>
+                <p className="mt-2 font-serif text-lg italic text-text lg:text-2xl">{quote.body}</p>
+                <p className="mt-2 font-mono text-xs text-muted">{quoteCaption}</p>
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleQuoteFavorite}
+                aria-label={quote.is_favorite ? t.notes.favoriteOn : t.notes.favoriteOff}
+                aria-pressed={quote.is_favorite}
+                className="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center text-accent"
+              >
+                <Icon name="favorite" style={quote.is_favorite ? { fill: "currentColor" } : undefined} />
+              </button>
+            </Card>
+          ) : (
+            <Card className="flex flex-col items-center gap-3 py-2 text-center">
+              <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.home.quoteTitle}</p>
+              <p className="font-serif text-lg text-muted">{t.home.quoteEmpty}</p>
+              <button
+                type="button"
+                onClick={() => setQuoteDialogOpen(true)}
+                className="flex h-12 items-center justify-center rounded-xl border-[1.5px] border-dashed border-stitch bg-surface px-5 font-serif text-sm text-text"
+              >
+                {t.home.quoteAddButton}
+              </button>
+            </Card>
+          )}
         </div>
       </div>
+
+      <NoteEditorDialog
+        open={quoteDialogOpen}
+        onClose={() => setQuoteDialogOpen(false)}
+        trigger={quoteTrigger}
+        onSaved={() => router.refresh()}
+        onDeleted={() => router.refresh()}
+      />
     </AppShell>
   );
 }

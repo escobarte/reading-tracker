@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getDailyPagesGoal, getDeadlineForReading, getYearlyBooksGoal } from "@/lib/db/goals";
 import type { DeadlineCardData } from "@/lib/db/goals";
+import { getQuoteOfDay, type NoteWithBook } from "@/lib/db/notes";
 import { localDateKey, localWeekRangeUtc, localYear } from "@/lib/time";
 import { getFinishedThisYearCount } from "./readings";
 import { getStreakDays, getTodaySummary } from "./sessions";
@@ -52,6 +53,7 @@ export type HomeData = {
   year: { finishedCount: number; goal: number };
   recent: HomeRecentBook[];
   deadline: HomeDeadline | null;
+  quoteOfDay: NoteWithBook | null;
 };
 
 async function fetchReadingSection(): Promise<HomeReadingBook[]> {
@@ -214,7 +216,7 @@ async function fetchRecentSection(): Promise<HomeRecentBook[]> {
 }
 
 export async function getHomeData(): Promise<HomeData> {
-  const [dailyGoal, yearGoal, reading, today, streak, queue, recent] = await Promise.all([
+  const [dailyGoal, yearGoal, reading, today, streak, queue, recent, quoteOfDay] = await Promise.all([
     getDailyPagesGoal(),
     getYearlyBooksGoal(localYear(new Date())),
     fetchReadingSection(),
@@ -222,6 +224,7 @@ export async function getHomeData(): Promise<HomeData> {
     getStreakDays(),
     fetchQueueSection(),
     fetchRecentSection(),
+    getQuoteOfDay(),
   ]);
 
   const [week, year, deadline] = await Promise.all([
@@ -239,5 +242,6 @@ export async function getHomeData(): Promise<HomeData> {
     year,
     recent,
     deadline,
+    quoteOfDay,
   };
 }
