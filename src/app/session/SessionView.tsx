@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -43,8 +43,10 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
   const [startingBookId, setStartingBookId] = useState<string | null>(null);
   const [todayPages, setTodayPages] = useState(0);
   const [todayGoal, setTodayGoal] = useState(DEFAULT_DAILY_PAGES_GOAL);
-  const [now, setNow] = useState(() => Date.now());
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const closeNoteDialog = useCallback(() => setNoteDialogOpen(false), []);
+  const currentBookId = phase.kind === "running" ? phase.book.id : null;
+  const noteTrigger = useMemo(() => ({ mode: "add" as const, defaultBookId: currentBookId }), [currentBookId]);
 
   const resolveBook = useCallback(
     async (bookId: string): Promise<Book | null> => {
@@ -134,20 +136,6 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
     };
   }, [phase.kind]);
 
-  const pausedAt = phase.kind === "running" ? phase.session.pausedAt : undefined;
-  useEffect(() => {
-    if (phase.kind !== "running" || pausedAt) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    function handleVisibility() {
-      if (document.visibilityState === "visible") setNow(Date.now());
-    }
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [phase.kind, pausedAt]);
-
   function handlePause() {
     if (phase.kind !== "running") return;
     const updated: ActiveSession = { ...phase.session, pausedAt: new Date().toISOString() };
@@ -164,7 +152,6 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
       pausedTotalMs: phase.session.pausedTotalMs + pausedMs,
     };
     writeActiveSession(updated);
-    setNow(Date.now());
     setPhase({ kind: "running", session: updated, book: phase.book });
   }
 
@@ -280,9 +267,6 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
   }
 
   const { session, book } = phase;
-  const elapsed = elapsedSeconds(session, now);
-  const minuteOfHour = (elapsed / 60) % 60;
-  const ringPercent = (minuteOfHour / 60) * 100;
   const isPaused = Boolean(session.pausedAt);
   const remainingPages = book.total_pages ? Math.max(0, book.total_pages - session.startPage) : null;
 
@@ -350,12 +334,7 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
       </div>
 
       <div className="flex flex-col items-center gap-2 pb-6">
-        <StitchRing percent={ringPercent} size="lg">
-          <div className="flex flex-col items-center">
-            <span className="font-mono text-[44px] leading-none text-text">{formatClock(elapsed)}</span>
-            <span className="mt-1 font-serif text-sm text-muted">{t.session.elapsedLabel}</span>
-          </div>
-        </StitchRing>
+        <SessionTimer session={session} isPaused={isPaused} />
       </div>
 
       <p className="pb-6 text-center font-mono text-sm text-muted">
@@ -389,12 +368,49 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
         </div>
       </div>
 
-      <NoteEditorDialog
-        open={noteDialogOpen}
-        onClose={() => setNoteDialogOpen(false)}
-        trigger={{ mode: "add", defaultBookId: book.id }}
-      />
+      <NoteEditorDialog open={noteDialogOpen} onClose={closeNoteDialog} trigger={noteTrigger} />
     </AppShell>
+  );
+}
+
+/**
+ * Собственное состояние тика, отдельное от SessionView: иначе секундный re-render
+ * родителя пересоздаёт инлайн-пропсы (onClose и т.п.) у NoteEditorDialog ниже по дереву
+ * и перезапускает focus-trap эффект Modal, выбивая фокус с поля ввода заметки.
+ */
+function SessionTimer({ session, isPaused }: { session: ActiveSession; isPaused: boolean }) {
+  const { t } = useLocale();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (isPaused) return;
+    // Обновляем сразу через микротаск (а не синхронным вызовом в теле эффекта, которое
+    // ловит react-hooks/set-state-in-effect), чтобы при возобновлении счётчик не показал
+    // на секунду устаревшее значение до первого тика интервала.
+    const refreshId = window.setTimeout(() => setNow(Date.now()), 0);
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    function handleVisibility() {
+      if (document.visibilityState === "visible") setNow(Date.now());
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearTimeout(refreshId);
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [isPaused, session.pausedTotalMs]);
+
+  const elapsed = elapsedSeconds(session, now);
+  const minuteOfHour = (elapsed / 60) % 60;
+  const ringPercent = (minuteOfHour / 60) * 100;
+
+  return (
+    <StitchRing percent={ringPercent} size="lg">
+      <div className="flex flex-col items-center">
+        <span className="font-mono text-[44px] leading-none text-text">{formatClock(elapsed)}</span>
+        <span className="mt-1 font-serif text-sm text-muted">{t.session.elapsedLabel}</span>
+      </div>
+    </StitchRing>
   );
 }
 
