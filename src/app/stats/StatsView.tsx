@@ -100,14 +100,13 @@ export function StatsView({ data, today }: StatsViewProps) {
     ) : null;
 
   const timeValue = formatHoursMinutes(tiles.minutes, t.book.hoursUnit, t.book.minutesUnit);
-  const speedValue =
-    tiles.speedPagesPerHour != null
-      ? formatTemplate(t.stats.tileSpeedValue, { speed: tiles.speedPagesPerHour })
-      : t.stats.noData;
-  const avgValue =
+  const speedValue = tiles.speedPagesPerHour != null ? String(tiles.speedPagesPerHour) : t.stats.noData;
+  const speedUnit = tiles.speedPagesPerHour != null ? t.stats.tileSpeedUnit : undefined;
+  const avgValue = tiles.avgMinutes != null ? String(tiles.avgMinutes) : t.stats.noData;
+  const avgUnit =
     tiles.avgMinutes != null && tiles.avgPages != null
-      ? formatTemplate(t.stats.tileAvgSessionValue, { minutes: tiles.avgMinutes, pages: tiles.avgPages })
-      : t.stats.noData;
+      ? formatTemplate(t.stats.tileAvgSessionUnit, { pages: tiles.avgPages })
+      : undefined;
   const streakValue = formatCount(tiles.streak, "day", locale);
 
   const calendarSummary = heatmap
@@ -155,8 +154,8 @@ export function StatsView({ data, today }: StatsViewProps) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6 lg:gap-4">
         <StatTile label={t.stats.tilePages} value={String(tiles.pages)} />
         <StatTile label={t.stats.tileTime} value={timeValue} />
-        <StatTile label={t.stats.tileSpeed} value={speedValue} />
-        <StatTile label={t.stats.tileAvgSession} value={avgValue} />
+        <StatTile label={t.stats.tileSpeed} value={speedValue} unit={speedUnit} />
+        <StatTile label={t.stats.tileAvgSession} value={avgValue} unit={avgUnit} />
         <StatTile label={t.stats.tileBooksFinished} value={String(tiles.booksFinished)} />
         <StatTile label={t.stats.tileStreak} value={streakValue} highlight />
       </div>
@@ -179,7 +178,11 @@ export function StatsView({ data, today }: StatsViewProps) {
           </div>
         )}
 
-        <div className="rounded-xl border-[1.5px] border-dashed border-accent bg-surface p-4 lg:col-start-3 lg:row-start-1 lg:p-5">
+        <div
+          className={`rounded-xl border-[1.5px] border-dashed border-accent bg-surface p-4 lg:row-start-1 lg:p-5 ${
+            heatmap ? "lg:col-start-3" : "lg:col-span-2"
+          }`}
+        >
           <div className="flex items-baseline justify-between">
             <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">
               {formatTemplate(t.stats.yearGoalTitle, { year: currentYear })}
@@ -213,7 +216,11 @@ export function StatsView({ data, today }: StatsViewProps) {
           )}
         </div>
 
-        <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-3 lg:row-start-2 lg:p-5">
+        <div
+          className={`rounded-xl border border-line bg-surface p-4 lg:p-5 ${
+            heatmap ? "lg:col-start-3 lg:row-start-2" : "lg:col-start-3 lg:row-start-1"
+          }`}
+        >
           <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.stats.whenTitle}</p>
           <div className="mt-3 flex flex-col gap-2.5">
             {whenRows.map((row) => {
@@ -237,7 +244,11 @@ export function StatsView({ data, today }: StatsViewProps) {
           )}
         </div>
 
-        <div className="rounded-xl border border-line bg-surface p-4 lg:col-span-3 lg:row-start-3 lg:p-5">
+        <div
+          className={`rounded-xl border border-line bg-surface p-4 lg:col-span-3 lg:p-5 ${
+            heatmap ? "lg:row-start-3" : "lg:row-start-2"
+          }`}
+        >
           <div className="flex items-baseline justify-between">
             <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{barsTitle}</p>
           </div>

@@ -54,15 +54,15 @@ export function PeriodBars({ bars, goal, futureValueLabel }: PeriodBarsProps) {
                 </div>
               );
             }
-            const heightPercent = Math.max(4, Math.round((bar.pages / maxValue) * 100));
+            const heightPercent = Math.min(100, Math.round((bar.pages / maxValue) * 100));
             return (
-              <div key={bar.key} className="flex flex-1 items-end justify-center">
+              <div key={bar.key} className="flex h-full flex-1 items-end justify-center">
                 <div
                   className={`w-9 rounded-t-[5px] rounded-b-[2px] lg:w-11 ${
                     bar.isCurrent ? "bg-accent shadow-[var(--shadow-cta)]" : "bg-bar"
                   }`}
                   style={{
-                    height: `${heightPercent}%`,
+                    height: `max(6px, ${heightPercent}%)`,
                     backgroundImage:
                       "repeating-linear-gradient(0deg, transparent 0 6px, color-mix(in srgb, var(--bg) 50%, transparent) 6px 8px)",
                   }}
