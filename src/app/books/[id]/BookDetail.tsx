@@ -18,7 +18,8 @@ import { DeadlineDialog } from "@/components/goals/DeadlineDialog";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount } from "@/i18n/plural";
-import { formatDeadlineDayMonth, formatHoursMinutes } from "@/lib/time";
+import { formatDeadlineDayMonth, formatHoursMinutes, localDateKey } from "@/lib/time";
+import { forecastFinishDate } from "@/lib/stats";
 import type { Book, BookShelf, ReadingSession } from "@/lib/db/types";
 import type { ReadingStats } from "@/lib/db/sessions";
 import type { DeadlineCardData } from "@/lib/db/goals";
@@ -32,6 +33,7 @@ type BookDetailProps = {
   readingId: string | null;
   deadline: DeadlineCardData | null;
   today: { pages: number; goal: number };
+  pace: number;
 };
 
 export function BookDetail({
@@ -42,6 +44,7 @@ export function BookDetail({
   readingId,
   deadline,
   today,
+  pace,
 }: BookDetailProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -98,6 +101,17 @@ export function BookDetail({
   }
 
   const percent = book.total_pages ? Math.min(100, Math.round((currentPage / book.total_pages) * 100)) : 0;
+  const remainingPages = book.total_pages ? Math.max(0, book.total_pages - currentPage) : 0;
+  const roundedPace = Math.round(pace);
+  const forecastDateKey =
+    readingId && book.total_pages ? forecastFinishDate(localDateKey(new Date()), remainingPages, pace) : null;
+  const forecastLine = forecastDateKey
+    ? formatTemplate(t.book.forecastLine, {
+        pace: roundedPace,
+        pagesUnit: t.book.pagesUnit,
+        date: formatDeadlineDayMonth(forecastDateKey, locale),
+      })
+    : null;
   const statTimeValue = stats ? formatHoursMinutes(stats.totalMinutes, t.book.hoursUnit, t.book.minutesUnit) : "—";
   const statSessionsValue = stats ? String(stats.sessionCount) : "—";
   const statSpeedValue = stats?.pagesPerHour != null ? String(stats.pagesPerHour) : "—";
@@ -206,6 +220,7 @@ export function BookDetail({
             <div className="mt-3">
               <StitchBar percent={percent} />
             </div>
+            {forecastLine && <p className="mt-2 font-serif text-sm text-muted">{forecastLine}</p>}
             <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
               <StatTile label={t.book.statTime} value={statTimeValue} />
               <StatTile label={t.book.statSessions} value={statSessionsValue} />

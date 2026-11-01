@@ -20,7 +20,7 @@ function formatLanguage(code: string | null, t: Dictionary): string | null {
   return normalized.slice(0, 2).toUpperCase();
 }
 
-export function AddBookForm() {
+export function AddBookForm({ genreSuggestions }: { genreSuggestions: string[] }) {
   const { t } = useLocale();
   const router = useRouter();
   const duplicateRef = useRef<HTMLDivElement>(null);
@@ -197,6 +197,7 @@ export function AddBookForm() {
           mode="add"
           pending={pending || searching}
           onDirty={clearDuplicate}
+          genreSuggestions={genreSuggestions}
           onSubmit={(values) => formAction(values)}
           duplicateBanner={
             duplicate && (

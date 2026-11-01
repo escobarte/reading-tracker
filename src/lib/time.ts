@@ -195,8 +195,8 @@ export function formatHomeDate(date: Date | string, locale: "ru" | "en"): string
 
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Validates a "YYYY-MM-DD" deadline key and builds the UTC midnight `Date` for it, or `null` if invalid/empty. */
-function parseDateKeySafe(dateKey: string | null | undefined): Date | null {
+/** Validates a "YYYY-MM-DD" date key and builds the UTC midnight `Date` for it, or `null` if invalid/empty. */
+export function parseDateKeySafe(dateKey: string | null | undefined): Date | null {
   if (!dateKey || !DATE_KEY_PATTERN.test(dateKey)) return null;
   const d = new Date(`${dateKey}T00:00:00Z`);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -232,4 +232,44 @@ export function formatMonthLabel(date: Date | string, locale: "ru" | "en"): stri
     year: "numeric",
   }).format(d);
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+/** Week range for the stats period header, e.g. "19–25 октября" or "28 сент. – 4 окт." across months. Returns "—" for an invalid key. */
+export function formatWeekRangeLabel(startKey: string, endKey: string, locale: "ru" | "en"): string {
+  const start = parseDateKeySafe(startKey);
+  const end = parseDateKeySafe(endKey);
+  if (!start || !end) return "—";
+  const intlLocale = locale === "ru" ? "ru-RO" : "en-GB";
+  const dayFmt = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, day: "numeric" });
+  const monthFmt = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, month: "short" });
+  const startDay = dayFmt.format(start);
+  const endDay = dayFmt.format(end);
+  const startMonth = monthFmt.format(start);
+  const endMonth = monthFmt.format(end);
+  if (startMonth === endMonth) return `${startDay}–${endDay} ${endMonth}`;
+  return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
+}
+
+/** Compact day range for a week bar label, e.g. "1–4 окт" or "5–11" (month shown only when `showMonth`). Returns "—" for an invalid key. */
+export function formatDayRangeCompact(startKey: string, endKey: string, locale: "ru" | "en", showMonth: boolean): string {
+  const start = parseDateKeySafe(startKey);
+  const end = parseDateKeySafe(endKey);
+  if (!start || !end) return "—";
+  const intlLocale = locale === "ru" ? "ru-RO" : "en-GB";
+  const dayFmt = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, day: "numeric" });
+  const startDay = dayFmt.format(start);
+  const endDay = dayFmt.format(end);
+  if (!showMonth) return `${startDay}–${endDay}`;
+  const month = new Intl.DateTimeFormat(intlLocale, { timeZone: APP_TIMEZONE, month: "short" }).format(end);
+  return `${startDay}–${endDay} ${month}`;
+}
+
+/** [start, end) UTC instants for the trailing `days` local calendar days up to and including `date`. */
+export function localTrailingDaysRangeUtc(
+  days: number,
+  date: Date = new Date(),
+  timeZone = APP_TIMEZONE,
+): { start: Date; end: Date } {
+  const { end } = localDayRangeUtc(date, timeZone);
+  return { start: new Date(end.getTime() - days * 86400000), end };
 }

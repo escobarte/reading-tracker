@@ -10,7 +10,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import type { Book } from "@/lib/db/types";
 import { updateBookAction } from "./actions";
 
-export function EditBookForm({ book }: { book: Book }) {
+export function EditBookForm({ book, genreSuggestions }: { book: Book; genreSuggestions: string[] }) {
   const { t } = useLocale();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -65,6 +65,7 @@ export function EditBookForm({ book }: { book: Book }) {
           pending={pending}
           showShelf={false}
           showHint={false}
+          genreSuggestions={genreSuggestions}
           onSubmit={handleSubmit}
         />
       </div>
