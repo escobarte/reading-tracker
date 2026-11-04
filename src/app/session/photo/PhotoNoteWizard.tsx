@@ -107,6 +107,10 @@ export function PhotoNoteWizard({ book, currentPage }: { book: Book; currentPage
         setOcrError("limit");
         return;
       }
+      if (response.status === 402) {
+        setOcrError("no_credit");
+        return;
+      }
       if (!response.ok) {
         setOcrError("generic");
         return;

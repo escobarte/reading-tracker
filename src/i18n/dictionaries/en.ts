@@ -287,6 +287,7 @@ const en: Dictionary = {
     recognizing: "Recognizing…",
     emptyHint: "No text found",
     errorLimit: "Daily recognition limit reached — save as a photo or type the text instead.",
+    errorNoCredit: "Anthropic account is out of credits. Save as a photo or type the text instead.",
     errorGeneric: "Couldn't recognize the text. You can save it as a photo or type it instead.",
   },
   stats: {

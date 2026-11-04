@@ -53,8 +53,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ text });
   } catch (error) {
     if (error instanceof OcrUpstreamError) {
-      // Не логируем ключ и ответы API — только код ошибки.
+      // Не логируем ключ, заголовки и тело запроса — только тип и усечённое сообщение ошибки Anthropic.
       console.error("[ocr] upstream error:", error.message);
+      if (error.kind === "no_credit") {
+        return NextResponse.json({ error: "no_credit" }, { status: 402 });
+      }
     } else {
       console.error("[ocr] unexpected error");
     }

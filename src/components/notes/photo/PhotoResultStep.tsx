@@ -11,7 +11,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import type { NoteType } from "@/lib/db/types";
 
-export type PhotoResultError = "limit" | "generic" | null;
+export type PhotoResultError = "limit" | "no_credit" | "generic" | null;
 
 type PhotoResultStepProps = {
   bookTitle: string;
@@ -119,7 +119,11 @@ export function PhotoResultStep({
       )}
       {!recognizing && error && (
         <p className="pt-3 font-serif text-sm text-deadline">
-          {error === "limit" ? t.photoResult.errorLimit : t.photoResult.errorGeneric}
+          {error === "limit"
+            ? t.photoResult.errorLimit
+            : error === "no_credit"
+              ? t.photoResult.errorNoCredit
+              : t.photoResult.errorGeneric}
         </p>
       )}
       {showEmptyHint && <p className="pt-3 font-serif text-sm text-muted">{t.photoResult.emptyHint}</p>}
