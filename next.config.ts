@@ -17,6 +17,16 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async headers() {
+    // Живой видоискатель в /session/photo использует getUserMedia — без этого заголовка
+    // некоторые браузеры по умолчанию запрещают доступ к камере на подресурсах.
+    return [
+      {
+        source: "/session/photo",
+        headers: [{ key: "Permissions-Policy", value: "camera=(self)" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

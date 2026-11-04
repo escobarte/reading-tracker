@@ -253,6 +253,9 @@ const ru = {
     flashButton: "Вспышка",
     shutterLabel: "Сделать фото",
     decodeError: "Не удалось обработать фото. Попробуйте ещё раз.",
+    requestingPermission: "Разреши доступ к камере",
+    noAccessHint: "Нет доступа к камере. Разреши камеру в настройках сайта или выбери фото из галереи.",
+    retryButton: "Повторить",
   },
   photoSelect: {
     backLabel: "Назад",

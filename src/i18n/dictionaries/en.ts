@@ -255,6 +255,9 @@ const en: Dictionary = {
     flashButton: "Flash",
     shutterLabel: "Take photo",
     decodeError: "Couldn't process this photo. Try again.",
+    requestingPermission: "Allow camera access",
+    noAccessHint: "No access to the camera. Allow it in the site settings or choose a photo from the gallery.",
+    retryButton: "Retry",
   },
   photoSelect: {
     backLabel: "Back",
