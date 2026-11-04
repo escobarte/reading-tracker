@@ -11,6 +11,8 @@ export type DropdownItem = {
   href?: string;
   active?: boolean;
   variant?: "default" | "danger";
+  /** Класс на обёртку `<li>` — например, `lg:hidden` для пункта, которого нет на ПК. */
+  className?: string;
 };
 
 type DropdownProps = {
@@ -79,7 +81,7 @@ export function Dropdown({
               item.variant === "danger" ? "text-deadline" : item.active ? "font-bold text-accent" : "text-text"
             }`;
             return (
-              <li key={item.label}>
+              <li key={item.label} className={item.className}>
                 {item.href ? (
                   <a href={item.href} role="option" aria-selected={item.active} onClick={() => setOpen(false)} className={itemClassName}>
                     {item.label}

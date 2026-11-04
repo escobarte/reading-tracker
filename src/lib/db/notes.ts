@@ -3,9 +3,19 @@ import { createClient } from "@/lib/supabase/server";
 import { groupGenres } from "@/lib/stats";
 import { pickQuoteOfDay } from "@/lib/notes";
 import { localDateKey } from "@/lib/time";
+import { deleteNotePhoto, getSignedPhotoUrls, notePhotoPath, uploadNotePhoto } from "./photos";
 import type { BookShelf, Note, NoteType } from "./types";
 
-export type NoteWithBook = Note & { bookTitle: string; bookAuthor: string | null };
+export type NoteWithBook = Note & { bookTitle: string; bookAuthor: string | null; photoUrl: string | null };
+export type NoteWithPhoto = Note & { photoUrl: string | null };
+
+async function attachPhotoUrls<T extends { photo_path: string | null }>(
+  notes: T[],
+): Promise<(T & { photoUrl: string | null })[]> {
+  const paths = notes.map((n) => n.photo_path).filter((p): p is string => Boolean(p));
+  const urls = await getSignedPhotoUrls(paths);
+  return notes.map((note) => ({ ...note, photoUrl: note.photo_path ? (urls.get(note.photo_path) ?? null) : null }));
+}
 
 export type NoteFilters = {
   type: NoteType | null;
@@ -27,10 +37,13 @@ async function attachBooks(notes: Note[]): Promise<NoteWithBook[]> {
   if (notes.length === 0) return [];
   const supabase = await createClient();
   const bookIds = [...new Set(notes.map((n) => n.book_id))];
-  const { data: books, error } = await supabase.from("books").select("id, title, author").in("id", bookIds);
+  const [{ data: books, error }, withPhotos] = await Promise.all([
+    supabase.from("books").select("id, title, author").in("id", bookIds),
+    attachPhotoUrls(notes),
+  ]);
   if (error) throw error;
   const byId = new Map((books ?? []).map((b) => [b.id, b]));
-  return notes.map((note) => ({
+  return withPhotos.map((note) => ({
     ...note,
     bookTitle: byId.get(note.book_id)?.title ?? "",
     bookAuthor: byId.get(note.book_id)?.author ?? null,
@@ -111,8 +124,123 @@ export async function updateNote(id: string, input: NoteInput): Promise<Note> {
 
 export async function deleteNote(id: string): Promise<void> {
   const supabase = await createClient();
+  const { data: existing, error: selectError } = await supabase
+    .from("notes")
+    .select("photo_path")
+    .eq("id", id)
+    .maybeSingle();
+  if (selectError) throw selectError;
+
   const { error } = await supabase.from("notes").delete().eq("id", id);
   if (error) throw error;
+
+  if (existing?.photo_path) await deleteNotePhoto(existing.photo_path);
+}
+
+/** Создаёт заметку типа `photo` без текста («Сохранить как фото») и сразу загружает фото в Storage. */
+export async function createPhotoNote(input: {
+  userId: string;
+  book_id: string;
+  page: number | null;
+  photoBytes: Uint8Array;
+}): Promise<Note> {
+  const supabase = await createClient();
+  const { data: note, error } = await supabase
+    .from("notes")
+    .insert({ book_id: input.book_id, type: "photo", body: null, meaning: null, page: input.page, tags: [] })
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  const path = notePhotoPath(input.userId, note.id);
+  try {
+    await uploadNotePhoto(path, input.photoBytes);
+  } catch (uploadError) {
+    await supabase.from("notes").delete().eq("id", note.id);
+    throw uploadError;
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("notes")
+    .update({ photo_path: path })
+    .eq("id", note.id)
+    .select("*")
+    .single();
+  if (updateError) throw updateError;
+  return updated;
+}
+
+/** Создаёт текстовую заметку (цитата/мысль/слово) с прикреплённым фото страницы (результат распознавания). */
+export async function createNoteWithPhoto(input: {
+  userId: string;
+  book_id: string;
+  type: NoteType;
+  body: string;
+  page: number | null;
+  photoBytes: Uint8Array;
+}): Promise<Note> {
+  const supabase = await createClient();
+  const body = input.body.trim();
+  const type: NoteType = body ? input.type : "photo";
+
+  const { data: note, error } = await supabase
+    .from("notes")
+    .insert({ book_id: input.book_id, type, body: body || null, meaning: null, page: input.page, tags: [] })
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  const path = notePhotoPath(input.userId, note.id);
+  try {
+    await uploadNotePhoto(path, input.photoBytes);
+  } catch (uploadError) {
+    await supabase.from("notes").delete().eq("id", note.id);
+    throw uploadError;
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("notes")
+    .update({ photo_path: path })
+    .eq("id", note.id)
+    .select("*")
+    .single();
+  if (updateError) throw updateError;
+  return updated;
+}
+
+/** «Заменить» в правке заметки: перезаписывает объект в Storage по тому же пути. */
+export async function replaceNotePhoto(userId: string, noteId: string, photoBytes: Uint8Array): Promise<string> {
+  const supabase = await createClient();
+  const path = notePhotoPath(userId, noteId);
+  await uploadNotePhoto(path, photoBytes);
+  const { error } = await supabase.from("notes").update({ photo_path: path }).eq("id", noteId);
+  if (error) throw error;
+  return path;
+}
+
+/** «Удалить фото» в правке заметки: убирает файл из Storage и ссылку в заметке. */
+export async function removeNotePhoto(noteId: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: existing, error: selectError } = await supabase
+    .from("notes")
+    .select("photo_path")
+    .eq("id", noteId)
+    .maybeSingle();
+  if (selectError) throw selectError;
+  if (!existing?.photo_path) return;
+
+  await deleteNotePhoto(existing.photo_path);
+  const { error } = await supabase.from("notes").update({ photo_path: null }).eq("id", noteId);
+  if (error) throw error;
+}
+
+export async function getNotePhotoUrl(noteId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("notes").select("photo_path").eq("id", noteId).maybeSingle();
+  if (error) throw error;
+  if (!data?.photo_path) return null;
+  const urls = await getSignedPhotoUrls([data.photo_path]);
+  return urls.get(data.photo_path) ?? null;
 }
 
 export async function setNoteFavorite(id: string, favorite: boolean): Promise<void> {
@@ -207,7 +335,7 @@ export async function getNotesCountForBook(bookId: string): Promise<number> {
   return count ?? 0;
 }
 
-export async function listRecentNotesForBook(bookId: string, limit: number): Promise<Note[]> {
+export async function listRecentNotesForBook(bookId: string, limit: number): Promise<NoteWithPhoto[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("notes")
@@ -216,7 +344,7 @@ export async function listRecentNotesForBook(bookId: string, limit: number): Pro
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return data ?? [];
+  return attachPhotoUrls(data ?? []);
 }
 
 /** cache(): главная читает цитату дня один раз за запрос. */

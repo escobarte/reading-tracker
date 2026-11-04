@@ -350,22 +350,13 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
           <Icon name="quote" width={20} height={20} />
           {t.session.addQuote}
         </button>
-        <div className="relative">
-          <button
-            type="button"
-            disabled
-            className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-base text-text opacity-50"
-          >
-            <Icon name="camera" width={20} height={20} />
-            {t.session.addPhoto}
-          </button>
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-2 right-2 rounded-full border border-dashed border-stitch bg-surface px-2 py-0.5 font-mono text-[10px] text-muted"
-          >
-            {t.common.soon}
-          </span>
-        </div>
+        <Link
+          href={`/session/photo?book=${book.id}`}
+          className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-base text-text"
+        >
+          <Icon name="camera" width={20} height={20} />
+          {t.session.addPhoto}
+        </Link>
       </div>
 
       <NoteEditorDialog open={noteDialogOpen} onClose={closeNoteDialog} trigger={noteTrigger} />

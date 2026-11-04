@@ -9,7 +9,7 @@ const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 300;
 
 function parseType(value: string | undefined): NoteType | null {
-  return value === "quote" || value === "thought" || value === "word" ? value : null;
+  return value === "quote" || value === "thought" || value === "word" || value === "photo" ? value : null;
 }
 
 function parseLimit(value: string | undefined): number {

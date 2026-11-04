@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "books.google.com" },
       { protocol: "https", hostname: "books.googleusercontent.com" },
       { protocol: "https", hostname: "covers.openlibrary.org" },
+      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/sign/**" },
     ],
   },
   turbopack: {

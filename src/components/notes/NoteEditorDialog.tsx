@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Stepper } from "@/components/ui/Stepper";
 import { TagInput } from "./TagInput";
+import { PhotoThumbnail } from "./PhotoThumbnail";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { bitmapFromFile, compressImage } from "@/lib/image";
 import {
   createNoteAction,
   deleteNoteAction,
   getNoteEditorDataAction,
+  getNotePhotoUrlAction,
+  removeNotePhotoAction,
+  replaceNotePhotoAction,
   updateNoteAction,
   type NoteBookOption,
 } from "@/app/notes/actions";
@@ -19,7 +24,7 @@ import type { Note, NoteType } from "@/lib/db/types";
 
 export type NoteEditorTrigger =
   | { mode: "add"; defaultBookId?: string | null }
-  | { mode: "edit"; note: Note };
+  | { mode: "edit"; note: Note; photoUrl?: string | null };
 
 type NoteEditorDialogProps = {
   open: boolean;
@@ -27,9 +32,11 @@ type NoteEditorDialogProps = {
   trigger: NoteEditorTrigger | null;
   onSaved?: (note: Note) => void;
   onDeleted?: (id: string) => void;
+  /** Фото заменили/удалили без закрытия окна — родитель может обновить список в фоне. */
+  onPhotoChanged?: () => void;
 };
 
-export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }: NoteEditorDialogProps) {
+export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, onPhotoChanged }: NoteEditorDialogProps) {
   const { t } = useLocale();
   const titleId = useId();
   const [pending, startTransition] = useTransition();
@@ -46,6 +53,12 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
+  const [hasPhoto, setHasPhoto] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoPending, setPhotoPending] = useState(false);
+  const [confirmPhotoDeleteOpen, setConfirmPhotoDeleteOpen] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   // Сброс полей на свежем рендере при каждом открытии — не в эффекте, чтобы не ловить лишний
   // каскадный рендер (react-hooks/set-state-in-effect), как в DeadlineDialog.
   const [wasOpen, setWasOpen] = useState(open);
@@ -54,6 +67,7 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
     if (open && trigger) {
       setError(null);
       setConfirmDeleteOpen(false);
+      setConfirmPhotoDeleteOpen(false);
       setLoading(true);
       if (trigger.mode === "edit") {
         setType(trigger.note.type === "photo" ? "quote" : trigger.note.type);
@@ -62,6 +76,8 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
         setMeaning(trigger.note.meaning ?? "");
         setPage(trigger.note.page);
         setTags(trigger.note.tags);
+        setHasPhoto(Boolean(trigger.note.photo_path));
+        setPhotoUrl(trigger.photoUrl ?? null);
       } else {
         setType("quote");
         setBookId(trigger.defaultBookId ?? "");
@@ -69,6 +85,8 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
         setMeaning("");
         setPage(null);
         setTags([]);
+        setHasPhoto(false);
+        setPhotoUrl(null);
       }
     }
   }
@@ -116,17 +134,22 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
       setError(t.noteEditor.errorBook);
       return;
     }
+    // Пустой текст у заметки с фото — это заметка типа «фото», а не пустая цитата/мысль/слово
+    // (иначе сохранение без правок молча переключит тип с «фото» на выбранный в Segmented).
+    const effectiveType: NoteType = !body.trim() && hasPhoto ? "photo" : type;
     const input = {
       book_id: bookId,
-      type,
+      type: effectiveType,
       body,
-      meaning: type === "word" ? meaning.trim() || null : null,
+      meaning: effectiveType === "word" ? meaning.trim() || null : null,
       page,
       tags,
     };
     startTransition(async () => {
       const result =
-        trigger.mode === "edit" ? await updateNoteAction(trigger.note.id, input) : await createNoteAction(input);
+        trigger.mode === "edit"
+          ? await updateNoteAction(trigger.note.id, input, hasPhoto)
+          : await createNoteAction(input);
       if (!result.ok) {
         setError(result.error === "empty" ? t.noteEditor.errorEmpty : t.noteEditor.errorTooLong);
         return;
@@ -145,6 +168,52 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
       onDeleted?.(noteId);
       setConfirmDeleteOpen(false);
       onClose();
+    });
+  }
+
+  async function handlePhotoFileSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !trigger || trigger.mode !== "edit" || photoPending) return;
+
+    setPhotoPending(true);
+    setError(null);
+    let bitmap: ImageBitmap | null = null;
+    try {
+      bitmap = await bitmapFromFile(file);
+      const { base64 } = await compressImage(bitmap, null, { maxDim: 1600, quality: 0.85 });
+      const result = await replaceNotePhotoAction(trigger.note.id, trigger.note.book_id, base64);
+      if (!result.ok) {
+        setError(t.photoResult.errorGeneric);
+        return;
+      }
+      const freshUrl = await getNotePhotoUrlAction(trigger.note.id);
+      setHasPhoto(true);
+      setPhotoUrl(freshUrl);
+      onPhotoChanged?.();
+    } catch {
+      setError(t.photoCapture.decodeError);
+    } finally {
+      bitmap?.close();
+      setPhotoPending(false);
+    }
+  }
+
+  function handlePhotoDeleteConfirmed() {
+    if (!trigger || trigger.mode !== "edit" || photoPending) return;
+    const noteId = trigger.note.id;
+    const noteBookId = trigger.note.book_id;
+    setPhotoPending(true);
+    removeNotePhotoAction(noteId, noteBookId).then((result) => {
+      setPhotoPending(false);
+      setConfirmPhotoDeleteOpen(false);
+      if (!result.ok) {
+        setError(t.photoResult.errorGeneric);
+        return;
+      }
+      setHasPhoto(false);
+      setPhotoUrl(null);
+      onPhotoChanged?.();
     });
   }
 
@@ -185,6 +254,40 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
             { value: "word", label: t.notes.typeWord },
           ]}
         />
+
+        {trigger.mode === "edit" && hasPhoto && (
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
+            <PhotoThumbnail src={photoUrl} seed={trigger.note.id} alt="" size="result" />
+            <div className="flex flex-1 flex-col gap-2">
+              <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.noteEditor.photoSectionLabel}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoPending}
+                  className="h-11 rounded-md border-[1.5px] border-dashed border-stitch bg-surface px-4 font-serif text-sm text-text disabled:opacity-50"
+                >
+                  {photoPending ? t.noteEditor.photoReplacing : t.noteEditor.photoReplace}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmPhotoDeleteOpen(true)}
+                  disabled={photoPending}
+                  className="h-11 rounded-md px-3 font-serif text-sm text-accent disabled:opacity-50"
+                >
+                  {t.noteEditor.photoDelete}
+                </button>
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoFileSelected}
+              />
+            </div>
+          </div>
+        )}
 
         {noBooks ? (
           <p className="font-serif text-sm text-muted">{t.noteEditor.noBooks}</p>
@@ -315,6 +418,23 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted }:
             {t.noteEditor.deleteConfirmButton}
           </Button>
           <Button variant="text" onClick={() => setConfirmDeleteOpen(false)} className="w-full">
+            {t.noteEditor.cancel}
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmPhotoDeleteOpen}
+        onClose={() => setConfirmPhotoDeleteOpen(false)}
+        titleId={`${titleId}-delete-photo`}
+        title={t.noteEditor.photoDeleteConfirmTitle}
+      >
+        <div className="flex flex-col gap-3">
+          <p className="font-serif text-sm text-muted">{t.noteEditor.photoDeleteConfirmBody}</p>
+          <Button onClick={handlePhotoDeleteConfirmed} disabled={photoPending} className="w-full">
+            {t.noteEditor.photoDeleteConfirmButton}
+          </Button>
+          <Button variant="text" onClick={() => setConfirmPhotoDeleteOpen(false)} className="w-full">
             {t.noteEditor.cancel}
           </Button>
         </div>

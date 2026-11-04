@@ -14,7 +14,7 @@ import { formatTemplate } from "@/i18n/format";
 import { addDays } from "@/lib/goals";
 import { noteDayGroup } from "@/lib/notes";
 import { formatHistoryDate, localDateKey } from "@/lib/time";
-import type { Note, NoteType } from "@/lib/db/types";
+import type { NoteType } from "@/lib/db/types";
 import type { NoteWithBook } from "@/lib/db/notes";
 
 type NotesFilters = { type: NoteType | null; favorite: boolean; bookId: string | null; query: string };
@@ -28,12 +28,20 @@ type NotesViewProps = {
   today: { pages: number; goal: number };
 };
 
-const TYPE_PILLS: { value: NoteType | "all"; key: "filterAll" | "typeQuote" | "typeThought" | "typeWord" }[] = [
+const TYPE_PILLS: { value: NoteType | "all"; key: "filterAll" | "typeQuote" | "typeThought" | "typeWord" | "typePhoto" }[] = [
   { value: "all", key: "filterAll" },
   { value: "quote", key: "typeQuote" },
   { value: "thought", key: "typeThought" },
   { value: "word", key: "typeWord" },
+  { value: "photo", key: "typePhoto" },
 ];
+
+function typeLabelFor(type: NoteType, t: ReturnType<typeof useLocale>["t"]): string {
+  if (type === "quote") return t.notes.typeQuote;
+  if (type === "word") return t.notes.typeWord;
+  if (type === "photo") return t.notes.typePhoto;
+  return t.notes.typeThought;
+}
 
 export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, today }: NotesViewProps) {
   const { t, locale } = useLocale();
@@ -80,8 +88,12 @@ export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, tod
     setTrigger({ mode: "add", defaultBookId: filters.bookId });
     setDialogOpen(true);
   }
-  function openEdit(note: Note) {
-    setTrigger({ mode: "edit", note });
+  function openAddPhoto() {
+    const qs = filters.bookId ? `?book=${filters.bookId}` : "";
+    router.push(`/session/photo${qs}`);
+  }
+  function openEdit(note: NoteWithBook) {
+    setTrigger({ mode: "edit", note, photoUrl: note.photoUrl });
     setDialogOpen(true);
   }
 
@@ -130,14 +142,16 @@ export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, tod
           >
             <Icon name="search" />
           </button>
-          <button
-            type="button"
-            aria-label={t.notes.addLabel}
-            onClick={openAdd}
-            className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-on"
-          >
-            <Icon name="plus" />
-          </button>
+          <Dropdown
+            trigger={<Icon name="plus" />}
+            triggerLabel={t.notes.addLabel}
+            showChevron={false}
+            triggerClassName="inline-flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-on"
+            items={[
+              { label: t.notes.addNoteItem, onSelect: openAdd },
+              { label: t.notes.addPhotoItem, onSelect: openAddPhoto, className: "lg:hidden" },
+            ]}
+          />
           <Dropdown
             trigger={<Icon name="more" />}
             triggerLabel={t.notes.moreLabel}
@@ -211,14 +225,19 @@ export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, tod
                   <p className="mt-2 font-mono text-xs uppercase tracking-[0.1em] text-muted lg:col-span-2">{label}</p>
                 )}
                 <NoteCard
+                  id={note.id}
                   type={note.type}
-                  typeLabel={note.type === "quote" ? t.notes.typeQuote : note.type === "word" ? t.notes.typeWord : t.notes.typeThought}
+                  typeLabel={typeLabelFor(note.type, t)}
                   body={note.body}
                   meaning={note.meaning}
                   caption={caption}
                   isFavorite={note.is_favorite}
                   favoriteLabel={note.is_favorite ? t.notes.favoriteOn : t.notes.favoriteOff}
                   tags={note.tags}
+                  hasPhoto={Boolean(note.photo_path)}
+                  photoUrl={note.photoUrl}
+                  photoNoTextLabel={t.notes.photoNoTextLabel}
+                  photoViewLabel={t.notes.photoViewLabel}
                   onOpen={() => openEdit(note)}
                   onToggleFavorite={() => handleToggleFavorite(note)}
                 />
@@ -244,6 +263,7 @@ export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, tod
         trigger={trigger}
         onSaved={() => router.refresh()}
         onDeleted={() => router.refresh()}
+        onPhotoChanged={() => router.refresh()}
       />
     </AppShell>
   );

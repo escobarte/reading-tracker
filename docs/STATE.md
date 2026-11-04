@@ -119,7 +119,7 @@
 ## ЧТО ДАЛЬШЕ
 
 1. Владелец: заменить документы в `docs/`, слить `phase-7/stats` и `phase-8a/notes` в `main`.
-2. **Фаза 8B — Фото-заметки (только телефон).** Ветка `phase-8b/photo-notes`. Макеты готовы (`docs/mockups/photo-*.png`, `DESIGN.md` 7.5). Перед ней владелец создаёт ключ Anthropic API (console.anthropic.com → API Keys) и добавляет его в Vercel как Secret `ANTHROPIC_API_KEY`; в Supabase нужны хранилище фото и миграция `0003` (дам инструкцию).
+2. **Фаза 8B — Фото-заметки (только телефон).** Ветка `phase-8b/photo-notes`. Макеты готовы (`docs/mockups/photo-*.png`, `DESIGN.md` 7.5). Подготовлено владельцем: ключ `ANTHROPIC_API_KEY` в Vercel (Secret), кредиты в Console, лимит расходов, бакет `note-photos` в Supabase. Промпт в `PROMPTS.md`, раздел «Фаза 8B». Распознавание через Claude (Haiku), лимит 30 в день.
 
 **Известное после Фазы 4 (не блокирует, разобрать в подходящей фазе):**
 - `/session?book=ID` по прямой ссылке на прочитанной книге сразу создаёт новое прочтение без вопроса.

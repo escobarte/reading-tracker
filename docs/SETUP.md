@@ -84,6 +84,7 @@ where provider = 'email' and identity_data->>'email' = 'СТАРАЯ_ПОЧТА'
 | `NEXT_PUBLIC_SUPABASE_URL` | адрес проекта `https://…supabase.co` | нет |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | публичный ключ, начинается с `sb_publishable_` | нет, защищён правилами RLS |
 | `GOOGLE_BOOKS_API_KEY` | ключ Google Books API (Фаза 3), только на сервере, без `NEXT_PUBLIC_` | **да.** Подробно: `guide-google-api.md` |
+| `ANTHROPIC_API_KEY` | ключ Anthropic API для распознавания текста по фото (Фаза 8B), только на сервере, Secret, Production и Preview | **да.** Предоплаченные кредиты в Console без автопополнения, лимит расходов в Spending → Spend limits, при утечке ключ удалить в Console → Keys & access |
 | Secret key (`sb_secret_…`) | полный доступ к базе | **да. Не копировать, не отправлять, не использовать** |
 | Database password | пароль самой базы | **да. Только в менеджере паролей** |
 
@@ -107,7 +108,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…
 3. Внизу должно быть **Success. No rows returned**. Красная ошибка означает, что что-то не выполнилось: скопировать текст ошибки и показать в штабе.
 4. Supabase → **Table Editor**: слева в списке должны появиться таблицы миграции (для `0001`: `books`, `readings`, `sessions`, `notes`, `goals`, `settings`).
 
-Выполнено: `0001_init.sql` (2026-10-22), `0002_goals.sql` (2026-10-27, Фаза 6: дедлайн по книге).
+Выполнено: `0001_init.sql` (2026-10-22), `0002_goals.sql` (2026-10-27, Фаза 6: дедлайн по книге), SQL бакета `note-photos` (2026-11-02, Фаза 8B; файл `0003_note_photos_storage.sql`, приватный бакет до 5 МБ, доступ только к своей папке).
 
 Проверка защиты (RLS включён на всех таблицах):
 ```

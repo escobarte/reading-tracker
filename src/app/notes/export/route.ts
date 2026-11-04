@@ -6,7 +6,7 @@ import type { NoteType } from "@/lib/db/types";
 import { formatDeadlineDayMonth, localDateKey } from "@/lib/time";
 
 function parseType(value: string | null): NoteType | null {
-  return value === "quote" || value === "thought" || value === "word" ? value : null;
+  return value === "quote" || value === "thought" || value === "word" || value === "photo" ? value : null;
 }
 
 function noteBlock(note: NoteWithBook, locale: "ru" | "en", pageLabel: string): string {
@@ -20,6 +20,9 @@ function noteBlock(note: NoteWithBook, locale: "ru" | "en", pageLabel: string): 
   }
   if (note.type === "thought") {
     return `- ${note.body}\n  ${meta}${tagsLine}`;
+  }
+  if (note.type === "photo" && !note.body) {
+    return `> [фото]\n${meta}${tagsLine}`;
   }
   return `> ${note.body}\n${meta}${tagsLine}`;
 }

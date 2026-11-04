@@ -1315,7 +1315,155 @@ RLS «только владелец», не запускай, покажи те�
 
 ---
 
-## Фазы 8B–11
+## Фаза 8B — Фото-заметки (ветка `phase-8b/photo-notes`)
+
+Перед промптом владелец: добавил `ANTHROPIC_API_KEY` в Vercel (Secret, Production и Preview), пополнил кредиты, поставил лимит расходов в Console, выполнил SQL бакета `note-photos` (текст в промпте и в `SETUP.md`). Макеты: `docs/mockups/photo-capture.png`, `photo-select.png`, `photo-result.png`; описание в `docs/DESIGN.md` 7.5. Только телефон.
+
+```
+Прочитай docs/STATE.md (жёсткие правила), docs/PLAN.md (Фаза 8, часть
+8B) и docs/DESIGN.md (разделы 2–6, 7, 7.5, 8). Посмотри docs/mockups/
+photo-capture.png, photo-select.png, photo-result.png, notes.png.
+Внешний вид только по DESIGN.md. Git не трогать, в начале назови ветку
+(ожидаю phase-8b/photo-notes).
+
+КОНТЕКСТ: владелец уже выполнил в Supabase SQL бакета note-photos
+(приватный, до 5 МБ, jpeg/png/webp, доступ только к папке со своим
+user id). Создай файл supabase/migrations/0003_note_photos_storage.sql
+с этим SQL как запись (не запускай), текст:
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('note-photos', 'note-photos', false, 5242880,
+        array['image/jpeg','image/png','image/webp'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = 5242880,
+      allowed_mime_types = array['image/jpeg','image/png','image/webp'];
+
+drop policy if exists "note_photos_select_own" on storage.objects;
+drop policy if exists "note_photos_insert_own" on storage.objects;
+drop policy if exists "note_photos_update_own" on storage.objects;
+drop policy if exists "note_photos_delete_own" on storage.objects;
+
+create policy "note_photos_select_own" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'note-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "note_photos_insert_own" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'note-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "note_photos_update_own" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'note-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "note_photos_delete_own" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'note-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+Ключ ANTHROPIC_API_KEY уже лежит в Vercel. Читай его только на сервере
+(process.env), в клиент, логи и ответы API не отдавай. Новый пакет для
+Claude добавлять не надо: вызови HTTPS API Anthropic (messages) через
+fetch на сервере; если уже есть официальный SDK, можно его.
+
+ЗАДАЧА: Фаза 8B — фото страницы и распознавание текста. Сначала изучи:
+таблицу notes (колонки типа photo и ссылки на фото), NoteEditorDialog,
+NoteCard, Modal, src/lib/db/notes.ts, кнопку «+ фото» на таймере (сейчас
+неактивна), supabase клиенты, src/lib/db/*.
+
+1. ХРАНЕНИЕ
+   - Фото в бакете note-photos по пути {user_id}/{note_id}.jpg. В notes
+     хранится путь, а не публичная ссылка. Показ через signed URL
+     (createSignedUrl, срок ~1 час), создаётся на сервере.
+   - Если для хранения пути или метаданных в notes не хватает колонки,
+     напиши supabase/migrations/0004_notes_photo.sql (идемпотентная, RLS
+     как у таблицы), не запускай, покажи текст в отчёте.
+   - Удаление заметки удаляет файл из бакета. Замена и удаление фото при
+     правке заметки.
+
+2. ЛИМИТ ЗАТРАТ (обязательно)
+   - Таблица ocr_usage (user_id, day date по Europe/Bucharest, count int,
+     уникальность user_id+day) с RLS владельца: supabase/migrations/
+     0005_ocr_usage.sql (идемпотентная, не запускай, покажи текст).
+   - Маршрут распознавания не вызывает Claude, если за сегодня уже 30
+     распознаваний: отвечает ошибкой «Дневной лимит распознавания
+     исчерпан, сохрани как фото или введи текст». Счётчик растёт только
+     при успешном вызове Claude. Лимит в константе в src/lib/config.ts
+     (OCR_DAILY_LIMIT = 30).
+   - Размер: изображение, которое уходит на распознавание, максимум
+     ~1 МБ после сжатия на клиенте; сервер отклоняет больше 2 МБ и не
+     принимает типы кроме jpeg/png/webp.
+
+3. РАСПОЗНАВАНИЕ (сервер: POST /api/notes/ocr)
+   - Проверка входа внутри самого маршрута (getClaims), не только в
+     proxy.ts. Без входа 401.
+   - Тело: изображение (обрезанный фрагмент) и язык книги (ru, en, ro).
+   - Модель берётся из ANTHROPIC_OCR_MODEL (переменная окружения,
+     необязательная), по умолчанию самая дешёвая актуальная модель Claude
+     с поддержкой изображений: claude-haiku-5-5. Вызов Anthropic Messages
+     API с изображением в base64. Промпт модели: «Перепиши точно весь
+     текст на изображении. Язык текста: {язык}. Не добавляй комментариев,
+     не переводи, не исправляй. Склей слова, разорванные переносом на
+     конце строки. Абзацы раздели пустой строкой. Если текста нет, верни
+     пустую строку». max_tokens 1500, temperature 0.
+   - Ответ: { text }. Ошибки (лимит, сеть, пустой текст) возвращай с
+     понятным кодом и текстом; ключ и ответы API не логируй.
+
+4. ЭКРАНЫ (только телефон, до 1023 px; на ПК кнопок фото нет)
+   - Съёмка (PhotoCapture): системная камера через <input type=file
+     accept="image/*" capture="environment"> и «Из галереи» через такой
+     же input без capture. Экран по макету, затвор открывает камеру.
+     Учитывай ориентацию EXIF (createImageBitmap с imageOrientation
+     "from-image" или аналог).
+   - Выбор фрагмента (PhotoSelect): фото на canvas или img, рамка с шестью
+     точками, перетаскивание pointer-событиями (touch-action: none),
+     зона касания точки 44×44, рамка не выходит за фото, минимальный
+     размер рамки. Затемнение вне рамки. Кнопки: «Распознать текст»,
+     «Переснять», «Сохранить как фото».
+   - Перед отправкой: обрезать по рамке на canvas, уменьшить до ~1600 px
+     по длинной стороне, JPEG ~0.85 (проверь вес, до ~1 МБ). Для
+     хранения: целая страница, до 1600 px по длинной стороне, JPEG 0.85.
+   - Результат (PhotoResult): Segmented Цитата/Мысль/Слово, поле текста
+     (правится), счётчик знаков, Stepper страницы (по умолчанию текущая
+     страница книги), миниатюра фото, «Сохранить заметку», «Распознать
+     заново» (повторный вызов считается в лимите). Состояния: «Распознаю…»
+     (кнопки неактивны, StitchBar, prefers-reduced-motion), ошибка (текст
+     --deadline, можно сохранить как фото или ввести текст руками),
+     пустой результат (подсказка «Текст не найден»).
+   - «Сохранить как фото»: заметка типа photo без текста (текст можно
+     добавить позже в правке).
+   - Всё состояние шагов (съёмка, выбор, результат) в одном клиентском
+     компоненте-мастере; не терять снимок при ошибке.
+
+5. ТОЧКИ ВХОДА
+   - Таймер: «+ фото» становится активной, открывает мастер для книги
+     сессии (таймер продолжает идти; не зависеть от секундного тика,
+     как исправлено в SessionTimer).
+   - /notes: в меню «+» пункты «Заметка» и «Фото» (пункт «Фото» только на
+     телефоне). Фильтр «Фото» в Pill-фильтрах.
+   - NoteCard: у заметки с фото миниатюра (по DESIGN NoteCard, лучше
+     реальная картинка через signed URL, размер 56×74, поворот ±3°);
+     нажатие открывает полное фото в Modal.
+   - В правке заметки: показ фото, «Заменить», «Удалить фото».
+
+6. ТЕКСТЫ И ВИД: все строки в словарях RU/EN. Только токены (экраны
+   съёмки и выбора тёмные всегда по DESIGN 7.5), нет hex. Кнопки не менее
+   44×44. Не забывай освобождать URL.createObjectURL.
+
+ГОТОВО, КОГДА: страница книги фотографируется, рамкой выделяется
+фрагмент, текст распознаётся и сохраняется цитатой за минуту; «Сохранить
+как фото» работает без распознавания; фото видно в заметке; при
+исчерпанном лимите распознавание не вызывает Claude; lint, typecheck,
+build проходят; нет hex и «зашитых» строк; ключ нигде не попадает в
+клиентский код.
+
+ПРАВИЛА: git не трогать; ключи в код не писать и не логировать; ничего из
+следующих фаз; новых пакетов без причины не добавлять.
+
+ОТЧЁТ: ветка, что сделано, файлы, ТЕКСТ миграций (0004 и 0005, если
+есть), как защищён ключ и лимит, примеры запроса и ответа маршрута
+(без ключа), отклонения, как проверить.
+```
+
+---
+
+## Фазы 9–11
 Промпты пишутся по одному перед каждой фазой, с учётом того, что к этому моменту уже в коде. Готовые добавляются в этот файл.
 
 ---

@@ -23,7 +23,8 @@ import { formatCount } from "@/i18n/plural";
 import { formatDeadlineDayMonth, formatHoursMinutes, localDateKey } from "@/lib/time";
 import { forecastFinishDate } from "@/lib/stats";
 import { toggleNoteFavoriteAction } from "@/app/notes/actions";
-import type { Book, BookShelf, Note, ReadingSession } from "@/lib/db/types";
+import type { NoteWithPhoto } from "@/lib/db/notes";
+import type { Book, BookShelf, ReadingSession } from "@/lib/db/types";
 import type { ReadingStats } from "@/lib/db/sessions";
 import type { DeadlineCardData } from "@/lib/db/goals";
 import { continueLastReadingAction, deleteBookAction, moveShelfAction } from "./actions";
@@ -38,7 +39,7 @@ type BookDetailProps = {
   today: { pages: number; goal: number };
   pace: number;
   notesCount: number;
-  recentNotes: Note[];
+  recentNotes: NoteWithPhoto[];
 };
 
 export function BookDetail({
@@ -69,11 +70,11 @@ export function BookDetail({
     setNoteTrigger({ mode: "add", defaultBookId: book.id });
     setNoteDialogOpen(true);
   }
-  function openEditNote(note: Note) {
-    setNoteTrigger({ mode: "edit", note });
+  function openEditNote(note: NoteWithPhoto) {
+    setNoteTrigger({ mode: "edit", note, photoUrl: note.photoUrl });
     setNoteDialogOpen(true);
   }
-  function handleToggleFavorite(note: Note) {
+  function handleToggleFavorite(note: NoteWithPhoto) {
     startTransition(() => {
       toggleNoteFavoriteAction(note.id, !note.is_favorite, note.book_id).then(() => router.refresh());
     });
@@ -338,9 +339,16 @@ export function BookDetail({
                   {recentNotes.map((note) => (
                     <NoteCard
                       key={note.id}
+                      id={note.id}
                       type={note.type}
                       typeLabel={
-                        note.type === "quote" ? t.notes.typeQuote : note.type === "word" ? t.notes.typeWord : t.notes.typeThought
+                        note.type === "quote"
+                          ? t.notes.typeQuote
+                          : note.type === "word"
+                            ? t.notes.typeWord
+                            : note.type === "photo"
+                              ? t.notes.typePhoto
+                              : t.notes.typeThought
                       }
                       body={note.body}
                       meaning={note.meaning}
@@ -348,6 +356,10 @@ export function BookDetail({
                       isFavorite={note.is_favorite}
                       favoriteLabel={note.is_favorite ? t.notes.favoriteOn : t.notes.favoriteOff}
                       tags={note.tags}
+                      hasPhoto={Boolean(note.photo_path)}
+                      photoUrl={note.photoUrl}
+                      photoNoTextLabel={t.notes.photoNoTextLabel}
+                      photoViewLabel={t.notes.photoViewLabel}
                       onOpen={() => openEditNote(note)}
                       onToggleFavorite={() => handleToggleFavorite(note)}
                     />
@@ -424,6 +436,7 @@ export function BookDetail({
         trigger={noteTrigger}
         onSaved={() => router.refresh()}
         onDeleted={() => router.refresh()}
+        onPhotoChanged={() => router.refresh()}
       />
     </AppShell>
   );
