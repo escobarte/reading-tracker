@@ -260,6 +260,7 @@ const en: Dictionary = {
     noAccessHint: "No access to the camera. Allow it in the site settings or choose a photo from the gallery.",
     noFrameHint: "The camera isn't producing a picture.",
     retryButton: "Retry",
+    focusHint: "Tap the text to focus",
   },
   photoSelect: {
     backLabel: "Back",

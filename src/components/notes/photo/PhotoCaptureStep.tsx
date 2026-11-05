@@ -19,8 +19,15 @@ type PhotoCaptureStepProps = {
 type CameraStatus = "requesting" | "starting" | "ready" | "denied" | "timeout" | "unsupported";
 
 /** Нестандартные, но широко поддерживаемые возможности треков камеры (фонарь, режим фокуса) — отсутствуют в lib.dom.d.ts. */
-type CameraTrackCapabilities = MediaTrackCapabilities & { torch?: boolean; focusMode?: string[] };
-type CameraConstraintSet = MediaTrackConstraintSet & { torch?: boolean; focusMode?: string };
+type CameraTrackCapabilities = MediaTrackCapabilities & { torch?: boolean; focusMode?: string[]; pointsOfInterest?: unknown };
+type CameraTrackSettings = MediaTrackSettings & { focusMode?: string };
+type CameraPointOfInterest = { x: number; y: number };
+type CameraConstraintSet = MediaTrackConstraintSet & {
+  torch?: boolean;
+  focusMode?: string;
+  pointsOfInterest?: CameraPointOfInterest[];
+};
+type FocusCapabilities = { modes: string[]; pointsOfInterest: boolean };
 
 const MAX_DEBUG_LINES = 40;
 const READY_TIMEOUT_MS = 4000;
@@ -47,11 +54,16 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
   const requestInFlightRef = useRef(false);
   const readyTimeoutRef = useRef<number | undefined>(undefined);
   const logRef = useRef<(line: string) => void>(() => {});
+  const focusCapsRef = useRef<FocusCapabilities>({ modes: [], pointsOfInterest: false });
+  const focusRingIdRef = useRef(0);
 
   const [status, setStatus] = useState<CameraStatus>("requesting");
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [hasTapped, setHasTapped] = useState(false);
+  const [focusRing, setFocusRing] = useState<{ x: number; y: number; id: number } | null>(null);
+  const [focusRingFading, setFocusRingFading] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugLines, setDebugLines] = useState<string[]>([]);
 
@@ -88,6 +100,21 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
   function logContainerRect(label: string) {
     const rect = containerRef.current?.getBoundingClientRect();
     logRef.current(`${nowMs()} ${label}: контейнер ${Math.round(rect?.width ?? 0)}×${Math.round(rect?.height ?? 0)}`);
+  }
+
+  /** Применяет focusMode/pointsOfInterest через advanced-констрейнт, логируя settings.focusMode до/после и результат. */
+  async function applyFocusConstraints(track: MediaStreamTrack, constraint: CameraConstraintSet, label: string): Promise<boolean> {
+    const before = (track.getSettings() as CameraTrackSettings).focusMode ?? "?";
+    logRef.current(`${nowMs()} ${label}: focusMode до=${before}`);
+    try {
+      await track.applyConstraints({ advanced: [constraint] });
+      const after = (track.getSettings() as CameraTrackSettings).focusMode ?? "?";
+      logRef.current(`${nowMs()} ${label}: ok, focusMode после=${after}`);
+      return true;
+    } catch (err) {
+      logRef.current(`${nowMs()} ${label}: ошибка ${errName(err)} ${errMessage(err)}`);
+      return false;
+    }
   }
 
   const startCamera = useCallback(async () => {
@@ -159,12 +186,16 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
     setTorchOn(false);
     logRef.current(`${nowMs()} фонарь: ${hasTorch ? "доступен" : "недоступен"}`);
 
-    if (capabilities?.focusMode?.includes("continuous")) {
-      try {
-        await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as CameraConstraintSet] });
-      } catch (focusErr) {
-        logRef.current(`${nowMs()} applyConstraints(фокус) ошибка: ${errMessage(focusErr)}`);
-      }
+    const focusModes = capabilities?.focusMode ?? [];
+    const hasPointsOfInterest = Boolean(capabilities?.pointsOfInterest);
+    focusCapsRef.current = { modes: focusModes, pointsOfInterest: hasPointsOfInterest };
+    logRef.current(`${nowMs()} focusMode поддерживаемые: ${focusModes.length ? focusModes.join(", ") : "нет"}`);
+    logRef.current(`${nowMs()} pointsOfInterest: ${hasPointsOfInterest ? "поддерживается" : "нет"}`);
+
+    if (focusModes.includes("continuous")) {
+      await applyFocusConstraints(track, { focusMode: "continuous" }, "начальный фокус");
+    } else if (focusModes.includes("single-shot")) {
+      logRef.current(`${nowMs()} continuous недоступен — single-shot будет применяться по тапу и перед съёмкой`);
     }
   }, []);
 
@@ -248,6 +279,8 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
   async function handleShutter() {
     const video = videoRef.current;
     if (status !== "ready" || !video || video.videoWidth === 0) return;
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (track) await preFocusBeforeShutter(track);
     try {
       let blob: Blob;
       try {
@@ -273,6 +306,9 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
     } catch {
       logRef.current(`${nowMs()} не удалось захватить кадр`);
     }
+    if (track && focusCapsRef.current.modes.includes("continuous")) {
+      applyFocusConstraints(track, { focusMode: "continuous" }, "после съёмки: возврат continuous").catch(() => {});
+    }
   }
 
   async function toggleTorch() {
@@ -285,6 +321,83 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
     } catch {
       logRef.current(`${nowMs()} не удалось переключить фонарь`);
     }
+  }
+
+  /** Координата тапа (в px контейнера) → нормированная точка 0..1 в исходном кадре, с учётом обрезки object-fit: cover. */
+  function mapTapToNormalizedPoint(clientX: number, clientY: number): CameraPointOfInterest | null {
+    const video = videoRef.current;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!video || !rect || video.videoWidth === 0 || video.videoHeight === 0) return null;
+
+    const scale = Math.max(rect.width / video.videoWidth, rect.height / video.videoHeight);
+    const displayedWidth = video.videoWidth * scale;
+    const displayedHeight = video.videoHeight * scale;
+    const offsetX = (displayedWidth - rect.width) / 2;
+    const offsetY = (displayedHeight - rect.height) / 2;
+
+    const sourceX = (clientX - rect.left + offsetX) / scale;
+    const sourceY = (clientY - rect.top + offsetY) / scale;
+
+    return {
+      x: Math.min(1, Math.max(0, sourceX / video.videoWidth)),
+      y: Math.min(1, Math.max(0, sourceY / video.videoHeight)),
+    };
+  }
+
+  function showFocusRing(x: number, y: number) {
+    const id = ++focusRingIdRef.current;
+    setFocusRingFading(false);
+    setFocusRing({ x, y, id });
+    window.setTimeout(() => setFocusRingFading(true), 20);
+    window.setTimeout(() => {
+      setFocusRing((curr) => (curr?.id === id ? null : curr));
+    }, 800);
+  }
+
+  /** Перефокус по тапу: точка интереса, если поддерживается, иначе короткий пульс single-shot/manual. */
+  async function refocusAtPoint(clientX: number, clientY: number) {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const caps = focusCapsRef.current;
+
+    if (caps.pointsOfInterest) {
+      const point = mapTapToNormalizedPoint(clientX, clientY);
+      if (!point) return;
+      const ok = await applyFocusConstraints(track, { focusMode: "single-shot", pointsOfInterest: [point] }, "тап-фокус (точка)");
+      if (ok && caps.modes.includes("continuous")) {
+        await applyFocusConstraints(track, { focusMode: "continuous" }, "тап-фокус: возврат continuous");
+      }
+      return;
+    }
+
+    const pulseMode = caps.modes.includes("single-shot") ? "single-shot" : caps.modes.includes("manual") ? "manual" : null;
+    if (!pulseMode) return;
+    await applyFocusConstraints(track, { focusMode: pulseMode }, "тап-фокус (перефокус)");
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
+    if (caps.modes.includes("continuous")) {
+      await applyFocusConstraints(track, { focusMode: "continuous" }, "тап-фокус: возврат continuous");
+    }
+  }
+
+  function handleViewfinderTap(event: { clientX: number; clientY: number }) {
+    if (status !== "ready") return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    showFocusRing(event.clientX - rect.left, event.clientY - rect.top);
+    setHasTapped(true);
+    refocusAtPoint(event.clientX, event.clientY).catch(() => {});
+  }
+
+  /** Короткий перефокус перед съёмкой — не ждём дольше 300 мс, даже если applyConstraints зависнет. */
+  async function preFocusBeforeShutter(track: MediaStreamTrack) {
+    const caps = focusCapsRef.current;
+    const mode = caps.modes.includes("single-shot") ? "single-shot" : caps.modes.includes("manual") ? "manual" : null;
+    if (!mode) return;
+    const constraint: CameraConstraintSet = caps.pointsOfInterest ? { focusMode: mode, pointsOfInterest: [{ x: 0.5, y: 0.5 }] } : { focusMode: mode };
+    await Promise.race([
+      applyFocusConstraints(track, constraint, "перефокус перед съёмкой"),
+      new Promise((resolve) => window.setTimeout(resolve, 300)),
+    ]);
   }
 
   const showOverlayMessage = status !== "ready" && status !== "unsupported";
@@ -314,8 +427,12 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
         <div className="h-12 w-12" aria-hidden="true" />
       </div>
 
-      <div className="relative flex flex-1 items-center justify-center px-8 py-6">
-        <div ref={containerRef} className="relative aspect-[3/4] w-full max-w-[360px] overflow-hidden rounded-2xl bg-black">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-3 px-8 py-6">
+        <div
+          ref={containerRef}
+          onClick={handleViewfinderTap}
+          className="relative aspect-[3/4] w-full max-w-[360px] overflow-hidden rounded-2xl bg-black"
+        >
           <video
             ref={videoRef}
             autoPlay
@@ -323,6 +440,16 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
             muted
             className="absolute inset-0 z-0 h-full w-full object-cover"
           />
+
+          {focusRing && (
+            <div
+              aria-hidden="true"
+              style={{ left: focusRing.x, top: focusRing.y }}
+              className={`pointer-events-none absolute z-20 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent transition-[opacity,transform] duration-700 ease-out ${
+                focusRingFading ? "scale-75 opacity-0" : "scale-100 opacity-100"
+              }`}
+            />
+          )}
 
           {showOverlayMessage && (
             <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-surface/90 px-6 text-center">
@@ -363,6 +490,10 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
             </div>
           )}
         </div>
+
+        {status === "ready" && !hasTapped && (
+          <p className="text-center font-mono text-xs text-muted">{t.photoCapture.focusHint}</p>
+        )}
       </div>
 
       {error && <p className="px-5 pb-2 text-center font-serif text-sm text-deadline">{error}</p>}
