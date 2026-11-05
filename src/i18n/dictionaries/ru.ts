@@ -254,7 +254,9 @@ const ru = {
     shutterLabel: "Сделать фото",
     decodeError: "Не удалось обработать фото. Попробуйте ещё раз.",
     requestingPermission: "Разреши доступ к камере",
+    startingCamera: "Запускаю камеру…",
     noAccessHint: "Нет доступа к камере. Разреши камеру в настройках сайта или выбери фото из галереи.",
+    noFrameHint: "Камера не отдаёт картинку.",
     retryButton: "Повторить",
   },
   photoSelect: {

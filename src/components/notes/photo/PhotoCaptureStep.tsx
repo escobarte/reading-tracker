@@ -12,21 +12,40 @@ type PhotoCaptureStepProps = {
   error?: string | null;
 };
 
-type CameraStatus = "requesting" | "ready" | "denied" | "unsupported";
+/**
+ * "starting" — поток получен, но <video> ещё не отдал ни одного кадра (videoWidth === 0).
+ * "ready" ставится только по loadedmetadata/playing/resize с videoWidth > 0, не по факту getUserMedia.
+ */
+type CameraStatus = "requesting" | "starting" | "ready" | "denied" | "timeout" | "unsupported";
 
 /** Нестандартные, но широко поддерживаемые возможности треков камеры (фонарь, режим фокуса) — отсутствуют в lib.dom.d.ts. */
 type CameraTrackCapabilities = MediaTrackCapabilities & { torch?: boolean; focusMode?: string[] };
 type CameraConstraintSet = MediaTrackConstraintSet & { torch?: boolean; focusMode?: string };
 
-const MAX_DEBUG_LINES = 20;
+const MAX_DEBUG_LINES = 40;
+const READY_TIMEOUT_MS = 4000;
+
+function errName(err: unknown): string {
+  return err instanceof Error ? err.name : "unknown";
+}
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "";
+}
+/** Метка времени для журнала диагностики — мс с начала загрузки страницы, без локали. */
+function nowMs(): string {
+  return `${Math.round(performance.now())}ms`;
+}
 
 export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: PhotoCaptureStepProps) {
   const { t } = useLocale();
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const fallbackInputId = useId();
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const requestInFlightRef = useRef(false);
+  const readyTimeoutRef = useRef<number | undefined>(undefined);
   const logRef = useRef<(line: string) => void>(() => {});
 
   const [status, setStatus] = useState<CameraStatus>("requesting");
@@ -50,48 +69,106 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
     return () => window.clearTimeout(id);
   }, []);
 
-  function stopStream() {
+  const setVideoReadyState = useCallback((ready: boolean) => {
+    setStatus((prev) => {
+      if (!ready) return prev === "ready" ? "starting" : prev;
+      if (prev === "denied" || prev === "unsupported") return prev;
+      return "ready";
+    });
+  }, []);
+
+  const stopStream = useCallback(() => {
+    window.clearTimeout(readyTimeoutRef.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setVideoReadyState(false);
+  }, [setVideoReadyState]);
+
+  function logContainerRect(label: string) {
+    const rect = containerRef.current?.getBoundingClientRect();
+    logRef.current(`${nowMs()} ${label}: контейнер ${Math.round(rect?.width ?? 0)}×${Math.round(rect?.height ?? 0)}`);
   }
 
   const startCamera = useCallback(async () => {
+    if (requestInFlightRef.current) return;
+
     if (!navigator.mediaDevices?.getUserMedia) {
+      logRef.current(`${nowMs()} getUserMedia не поддерживается`);
       setStatus("unsupported");
       return;
     }
+
+    requestInFlightRef.current = true;
     setStatus("requesting");
-    logRef.current("запрос доступа к камере");
+    logRef.current(`${nowMs()} getUserMedia: запрос разрешения (мягкие ограничения)`);
+
+    let stream: MediaStream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 2560 }, height: { ideal: 1440 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-
-      const track = stream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities?.() as CameraTrackCapabilities | undefined;
-      const settings = track.getSettings();
-      logRef.current(`разрешение дано, поток ${settings.width ?? "?"}×${settings.height ?? "?"}`);
-
-      const hasTorch = Boolean(capabilities?.torch);
-      setTorchSupported(hasTorch);
-      setTorchOn(false);
-      logRef.current(`фонарь: ${hasTorch ? "доступен" : "недоступен"}`);
-
-      if (capabilities?.focusMode?.includes("continuous")) {
-        track.applyConstraints({ advanced: [{ focusMode: "continuous" } as CameraConstraintSet] }).catch(() => {});
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      } catch (softErr) {
+        logRef.current(`${nowMs()} getUserMedia(environment) ошибка: ${errName(softErr)} ${errMessage(softErr)} — повтор без facingMode`);
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       }
-
-      setStatus("ready");
     } catch (err) {
-      const name = err instanceof Error ? err.name : "unknown";
-      logRef.current(`ошибка getUserMedia: ${name}`);
+      requestInFlightRef.current = false;
+      logRef.current(`${nowMs()} getUserMedia ошибка: ${errName(err)} ${errMessage(err)}`);
       setStatus("denied");
+      return;
+    }
+    requestInFlightRef.current = false;
+
+    streamRef.current = stream;
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    logRef.current(
+      `${nowMs()} getUserMedia: разрешение получено, трек label="${track.label}" readyState=${track.readyState} settings=${settings.width ?? "?"}×${settings.height ?? "?"}`,
+    );
+
+    setStatus("starting");
+    window.clearTimeout(readyTimeoutRef.current);
+    readyTimeoutRef.current = window.setTimeout(() => {
+      if (!(videoRef.current && videoRef.current.videoWidth > 0)) {
+        logRef.current(`${nowMs()} таймаут: нет кадров от камеры за ${READY_TIMEOUT_MS}мс`);
+        setStatus("timeout");
+      }
+    }, READY_TIMEOUT_MS);
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      try {
+        await videoRef.current.play();
+        logRef.current(`${nowMs()} video.play() выполнен`);
+      } catch (playErr) {
+        logRef.current(`${nowMs()} video.play() ошибка: ${errMessage(playErr)}`);
+      }
+    }
+    logContainerRect("после подключения потока");
+
+    // Желаемое разрешение — лучше с ним, но поток и без него рабочий.
+    try {
+      await track.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } });
+    } catch (resErr) {
+      logRef.current(`${nowMs()} applyConstraints(резолюция) ошибка: ${errMessage(resErr)}`);
+    }
+
+    const capabilities = track.getCapabilities?.() as CameraTrackCapabilities | undefined;
+    const hasTorch = Boolean(capabilities?.torch);
+    setTorchSupported(hasTorch);
+    setTorchOn(false);
+    logRef.current(`${nowMs()} фонарь: ${hasTorch ? "доступен" : "недоступен"}`);
+
+    if (capabilities?.focusMode?.includes("continuous")) {
+      try {
+        await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as CameraConstraintSet] });
+      } catch (focusErr) {
+        logRef.current(`${nowMs()} applyConstraints(фокус) ошибка: ${errMessage(focusErr)}`);
+      }
     }
   }, []);
 
+  // Поток стартует только при монтировании/ретрае/возврате видимости — не создаём/не убираем <video> условным рендером.
   useEffect(() => {
     // Запуск через микротаск, а не синхронным вызовом в теле эффекта (react-hooks/set-state-in-effect).
     const id = window.setTimeout(() => startCamera(), 0);
@@ -99,20 +176,62 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
       window.clearTimeout(id);
       stopStream();
     };
-  }, [startCamera]);
+  }, [startCamera, stopStream]);
 
   useEffect(() => {
     function handleVisibility() {
+      logRef.current(`${nowMs()} visibilitychange: ${document.visibilityState}`);
       if (document.hidden) {
-        logRef.current("страница скрыта — камера остановлена");
+        // На Android системный диалог разрешения на камеру тоже скрывает страницу — пока запрос
+        // в полёте, треки не трогаем, иначе только выданное разрешение само себя обнулит.
+        if (requestInFlightRef.current) {
+          logRef.current(`${nowMs()} страница скрыта во время запроса разрешения — поток не трогаем`);
+          return;
+        }
+        logRef.current(`${nowMs()} страница скрыта — камера остановлена`);
         stopStream();
-      } else if (status !== "unsupported") {
+      } else if (status !== "unsupported" && !streamRef.current && !requestInFlightRef.current) {
         startCamera();
       }
     }
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [startCamera, status]);
+  }, [startCamera, status, stopStream]);
+
+  // <video> всегда в разметке — слушатели вешаются один раз на весь жизненный цикл компонента.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    function handleLoadedMetadata() {
+      logRef.current(`${nowMs()} video loadedmetadata: ${video!.videoWidth}×${video!.videoHeight}`);
+      logContainerRect("loadedmetadata");
+      setVideoReadyState(video!.videoWidth > 0);
+    }
+    function handlePlaying() {
+      logRef.current(`${nowMs()} video playing: ${video!.videoWidth}×${video!.videoHeight}`);
+      logContainerRect("playing");
+      setVideoReadyState(video!.videoWidth > 0);
+    }
+    function handleResize() {
+      logRef.current(`${nowMs()} video resize: ${video!.videoWidth}×${video!.videoHeight}`);
+      setVideoReadyState(video!.videoWidth > 0);
+    }
+    function handleError() {
+      logRef.current(`${nowMs()} video error`);
+    }
+
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    video.addEventListener("playing", handlePlaying);
+    video.addEventListener("resize", handleResize);
+    video.addEventListener("error", handleError);
+    return () => {
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.removeEventListener("playing", handlePlaying);
+      video.removeEventListener("resize", handleResize);
+      video.removeEventListener("error", handleError);
+    };
+  }, [setVideoReadyState]);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -127,15 +246,32 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
   }
 
   async function handleShutter() {
-    if (status !== "ready" || !videoRef.current) return;
+    const video = videoRef.current;
+    if (status !== "ready" || !video || video.videoWidth === 0) return;
     try {
-      const bitmap = await createImageBitmap(videoRef.current);
-      const compressed = await compressImage(bitmap, null, { maxDim: 1600, quality: 0.85 });
-      bitmap.close();
+      let blob: Blob;
+      try {
+        const bitmap = await createImageBitmap(video);
+        const compressed = await compressImage(bitmap, null, { maxDim: 1600, quality: 0.85 });
+        bitmap.close();
+        blob = compressed.blob;
+      } catch {
+        logRef.current(`${nowMs()} createImageBitmap(video) не удался — запасной путь через canvas`);
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas_unsupported");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const canvasBitmap = await createImageBitmap(canvas);
+        const compressed = await compressImage(canvasBitmap, null, { maxDim: 1600, quality: 0.85 });
+        canvasBitmap.close();
+        blob = compressed.blob;
+      }
       triggerFlash();
-      onFileSelected(new File([compressed.blob], "capture.jpg", { type: "image/jpeg" }));
+      onFileSelected(new File([blob], "capture.jpg", { type: "image/jpeg" }));
     } catch {
-      logRef.current("не удалось захватить кадр");
+      logRef.current(`${nowMs()} не удалось захватить кадр`);
     }
   }
 
@@ -147,11 +283,13 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
       await track.applyConstraints({ advanced: [{ torch: next } as CameraConstraintSet] });
       setTorchOn(next);
     } catch {
-      logRef.current("не удалось переключить фонарь");
+      logRef.current(`${nowMs()} не удалось переключить фонарь`);
     }
   }
 
-  const showViewfinder = status === "ready" || status === "requesting";
+  const showOverlayMessage = status !== "ready" && status !== "unsupported";
+  const showFrameGuide = status !== "denied" && status !== "timeout";
+  const showRetryButtons = status === "denied" || status === "timeout";
 
   return (
     <div data-theme="dark" className="theme-surface flex h-dvh flex-col">
@@ -177,22 +315,23 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
       </div>
 
       <div className="relative flex flex-1 items-center justify-center px-8 py-6">
-        <div className="relative aspect-[3/4] w-full max-w-[360px] overflow-hidden rounded-2xl bg-black">
-          {status === "ready" && (
-            <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full object-cover" />
-          )}
+        <div ref={containerRef} className="relative aspect-[3/4] w-full max-w-[360px] overflow-hidden rounded-2xl bg-black">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="absolute inset-0 z-0 h-full w-full object-cover"
+          />
 
-          {status === "requesting" && (
-            <div className="absolute inset-0 flex items-center justify-center px-6">
-              <p className="text-center font-serif text-sm text-muted">{t.photoCapture.requestingPermission}</p>
-            </div>
-          )}
-
-          {(status === "denied" || status === "unsupported") && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
+          {showOverlayMessage && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-surface/90 px-6 text-center">
+              {status === "requesting" && <p className="font-serif text-sm text-muted">{t.photoCapture.requestingPermission}</p>}
+              {status === "starting" && <p className="font-serif text-sm text-muted">{t.photoCapture.startingCamera}</p>}
               {status === "denied" && <p className="font-serif text-sm text-muted">{t.photoCapture.noAccessHint}</p>}
-              {status === "denied" && (
-                <div className="flex gap-3">
+              {status === "timeout" && <p className="font-serif text-sm text-muted">{t.photoCapture.noFrameHint}</p>}
+              {showRetryButtons && (
+                <div className="pointer-events-auto flex gap-3">
                   <button
                     type="button"
                     onClick={() => startCamera()}
@@ -212,8 +351,8 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
             </div>
           )}
 
-          {showViewfinder && (
-            <>
+          {showFrameGuide && (
+            <div className="pointer-events-none absolute inset-0 z-10">
               <div aria-hidden="true" className="absolute left-0 top-0 h-11 w-11 border-l-[3px] border-t-[3px] border-accent" />
               <div aria-hidden="true" className="absolute right-0 top-0 h-11 w-11 border-r-[3px] border-t-[3px] border-accent" />
               <div aria-hidden="true" className="absolute bottom-0 left-0 h-11 w-11 border-b-[3px] border-l-[3px] border-accent" />
@@ -221,7 +360,7 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
               <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded-full border border-dashed border-stitch bg-surface px-4 py-2">
                 <p className="font-mono text-xs text-muted">{t.photoCapture.viewfinderHint}</p>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -276,7 +415,7 @@ export function PhotoCaptureStep({ bookTitle, onClose, onFileSelected, error }: 
 
       {debugEnabled && debugLines.length > 0 && (
         // Временная диагностика камеры (?debug=1) — убрать, когда живая камера будет проверена на устройствах.
-        <div className="max-h-28 overflow-y-auto border-t border-dashed border-stitch bg-surface px-4 py-2 font-mono text-[10px] text-muted">
+        <div className="max-h-32 overflow-y-auto border-t border-dashed border-stitch bg-surface px-4 py-2 font-mono text-[10px] text-muted">
           {debugLines.map((line, index) => (
             <p key={index}>{line}</p>
           ))}

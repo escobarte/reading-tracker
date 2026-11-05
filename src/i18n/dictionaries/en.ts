@@ -256,7 +256,9 @@ const en: Dictionary = {
     shutterLabel: "Take photo",
     decodeError: "Couldn't process this photo. Try again.",
     requestingPermission: "Allow camera access",
+    startingCamera: "Starting the camera…",
     noAccessHint: "No access to the camera. Allow it in the site settings or choose a photo from the gallery.",
+    noFrameHint: "The camera isn't producing a picture.",
     retryButton: "Retry",
   },
   photoSelect: {
