@@ -31,6 +31,53 @@ export async function getLatestReading(bookId: string): Promise<Reading | null> 
   return data;
 }
 
+/** Последнее закрытое прочтение книги — то, для которого показывается экран «Книга прочитана». */
+export async function getLatestFinishedReading(bookId: string): Promise<Reading | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("readings")
+    .select("*")
+    .eq("book_id", bookId)
+    .not("finished_at", "is", null)
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+const WRAPUP_TEXT_MAX = 5000;
+
+function clampWrapupText(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.slice(0, WRAPUP_TEXT_MAX);
+}
+
+export type ReadingWrapupInput = {
+  rating: number | null;
+  review: string | null;
+  takeaway: string | null;
+};
+
+/** Сохраняет оценку, отзыв и итог прочтения; любое поле можно оставить пустым. RLS ограничивает запись своими прочтениями. */
+export async function saveReadingWrapup(readingId: string, input: ReadingWrapupInput): Promise<Reading> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("readings")
+    .update({
+      rating: input.rating,
+      review: clampWrapupText(input.review),
+      summary: clampWrapupText(input.takeaway),
+    })
+    .eq("id", readingId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 /** Число прочтений, закрытых в текущем календарном году (Europe/Bucharest) — для годовой цели. */
 export async function getFinishedThisYearCount(): Promise<number> {
   const supabase = await createClient();

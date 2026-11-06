@@ -29,7 +29,9 @@ export type Reading = {
   started_at: string | null;
   finished_at: string | null;
   rating: number | null;
+  /** «Что я понял» — итог прочтения. */
   summary: string | null;
+  review: string | null;
   pause_reason: string | null;
 };
 

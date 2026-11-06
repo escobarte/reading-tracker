@@ -151,6 +151,14 @@ export function formatHoursMinutes(totalMinutes: number, hourUnit: string, minut
   return `${hours} ${hourUnit} ${minutes} ${minuteUnit}`;
 }
 
+/** Compact "Ч:ММ" duration, e.g. "9:40", for the finish-screen time tile. */
+export function formatHoursMinutesCompact(totalMinutes: number): string {
+  const total = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
 /** Weekday + day + month for a history row, formatted per locale in the app timezone. */
 export function formatHistoryDate(date: Date | string, locale: "ru" | "en"): string {
   const d = typeof date === "string" ? new Date(date) : date;

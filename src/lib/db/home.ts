@@ -42,6 +42,7 @@ export type HomeRecentBook = {
   id: string;
   title: string;
   coverUrl: string | null;
+  rating: number | null;
 };
 
 export type HomeData = {
@@ -186,18 +187,20 @@ async function fetchRecentSection(): Promise<HomeRecentBook[]> {
   const supabase = await createClient();
   const { data: readings, error: readingsError } = await supabase
     .from("readings")
-    .select("book_id, finished_at")
+    .select("book_id, finished_at, rating")
     .not("finished_at", "is", null)
     .order("finished_at", { ascending: false })
     .limit(30);
   if (readingsError) throw readingsError;
 
   const orderedBookIds: string[] = [];
+  const ratingByBookId = new Map<string, number | null>();
   const seen = new Set<string>();
   for (const reading of readings ?? []) {
     if (seen.has(reading.book_id)) continue;
     seen.add(reading.book_id);
     orderedBookIds.push(reading.book_id);
+    ratingByBookId.set(reading.book_id, reading.rating);
     if (orderedBookIds.length >= 6) break;
   }
   if (orderedBookIds.length === 0) return [];
@@ -212,7 +215,12 @@ async function fetchRecentSection(): Promise<HomeRecentBook[]> {
   return orderedBookIds
     .map((id) => byId.get(id))
     .filter((book): book is NonNullable<typeof book> => Boolean(book))
-    .map((book) => ({ id: book.id, title: book.title, coverUrl: book.cover_url }));
+    .map((book) => ({
+      id: book.id,
+      title: book.title,
+      coverUrl: book.cover_url,
+      rating: ratingByBookId.get(book.id) ?? null,
+    }));
 }
 
 export async function getHomeData(): Promise<HomeData> {

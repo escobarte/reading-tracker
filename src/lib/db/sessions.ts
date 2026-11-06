@@ -205,6 +205,24 @@ export async function getReadingStats(readingId: string): Promise<ReadingStats> 
   };
 }
 
+export type ReadingWrapupStats = { days: number; minutes: number; pages: number };
+
+/** Дни, время и страницы прочтения — считается по сессиям, для плиток экрана «Книга прочитана». */
+export async function getReadingWrapupStats(readingId: string): Promise<ReadingWrapupStats> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sessions")
+    .select("started_at, seconds, pages_read")
+    .eq("reading_id", readingId);
+  if (error) throw error;
+
+  const sessions = data ?? [];
+  const minutes = Math.round(sessions.reduce((sum, s) => sum + (s.seconds ?? 0), 0) / 60);
+  const pages = sessions.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
+  const days = new Set(sessions.map((s) => localDateKey(s.started_at))).size;
+  return { days, minutes, pages };
+}
+
 export type TodaySummary = { pages: number; minutes: number; sessionCount: number };
 
 /** cache(): несколько компонентов одного запроса (layout, Sidebar, сама страница) читают сводку за сегодня один раз. */

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getBook } from "@/lib/db/books";
 import { getDailyPagesGoal, getDeadlineForReading } from "@/lib/db/goals";
-import { getLatestReading } from "@/lib/db/readings";
+import { getLatestFinishedReading, getLatestReading } from "@/lib/db/readings";
 import { getMaxPageForReading, getReadingStats, getTodaySummary, listRecentSessions } from "@/lib/db/sessions";
 import { getRecentPace } from "@/lib/db/stats";
 import { getNotesCountForBook, listRecentNotesForBook } from "@/lib/db/notes";
@@ -15,17 +15,19 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
   const reading = await getLatestReading(id);
   const openReading = reading && !reading.finished_at && book.shelf === "reading" ? reading : null;
 
-  const [currentPage, stats, sessions, deadline, goal, today, pace, notesCount, recentNotes] = await Promise.all([
-    reading ? getMaxPageForReading(reading.id) : Promise.resolve(0),
-    reading ? getReadingStats(reading.id) : Promise.resolve(null),
-    reading ? listRecentSessions(reading.id, 5) : Promise.resolve([]),
-    openReading && book.total_pages ? getDeadlineForReading(openReading.id, book.total_pages) : Promise.resolve(null),
-    getDailyPagesGoal(),
-    getTodaySummary(),
-    openReading ? getRecentPace(openReading.id) : Promise.resolve(0),
-    getNotesCountForBook(id),
-    listRecentNotesForBook(id, 2),
-  ]);
+  const [currentPage, stats, sessions, deadline, goal, today, pace, notesCount, recentNotes, latestFinishedReading] =
+    await Promise.all([
+      reading ? getMaxPageForReading(reading.id) : Promise.resolve(0),
+      reading ? getReadingStats(reading.id) : Promise.resolve(null),
+      reading ? listRecentSessions(reading.id, 5) : Promise.resolve([]),
+      openReading && book.total_pages ? getDeadlineForReading(openReading.id, book.total_pages) : Promise.resolve(null),
+      getDailyPagesGoal(),
+      getTodaySummary(),
+      openReading ? getRecentPace(openReading.id) : Promise.resolve(0),
+      getNotesCountForBook(id),
+      listRecentNotesForBook(id, 2),
+      getLatestFinishedReading(id),
+    ]);
 
   return (
     <BookDetail
@@ -39,6 +41,7 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
       pace={pace}
       notesCount={notesCount}
       recentNotes={recentNotes}
+      latestFinishedReading={latestFinishedReading}
     />
   );
 }

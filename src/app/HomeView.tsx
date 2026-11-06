@@ -187,7 +187,11 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
           <section className="h-full rounded-xl border border-line bg-surface p-4 lg:p-5">
             <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.home.recentTitle}</p>
             {data.recent.length > 0 ? (
-              <CoverRow items={data.recent} hrefFor={(id) => `/books/${id}`} />
+              <CoverRow
+                items={data.recent}
+                hrefFor={(id) => `/books/${id}`}
+                ratingLabel={(rating) => formatTemplate(t.home.recentRatingLabel, { rating })}
+              />
             ) : (
               <p className="py-4 text-center font-serif text-base text-muted">{t.home.recentEmpty}</p>
             )}

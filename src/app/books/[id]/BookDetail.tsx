@@ -24,7 +24,7 @@ import { formatDeadlineDayMonth, formatHoursMinutes, localDateKey } from "@/lib/
 import { forecastFinishDate } from "@/lib/stats";
 import { toggleNoteFavoriteAction } from "@/app/notes/actions";
 import type { NoteWithPhoto } from "@/lib/db/notes";
-import type { Book, BookShelf, ReadingSession } from "@/lib/db/types";
+import type { Book, BookShelf, Reading, ReadingSession } from "@/lib/db/types";
 import type { ReadingStats } from "@/lib/db/sessions";
 import type { DeadlineCardData } from "@/lib/db/goals";
 import { continueLastReadingAction, deleteBookAction, moveShelfAction } from "./actions";
@@ -40,6 +40,7 @@ type BookDetailProps = {
   pace: number;
   notesCount: number;
   recentNotes: NoteWithPhoto[];
+  latestFinishedReading: Reading | null;
 };
 
 export function BookDetail({
@@ -53,6 +54,7 @@ export function BookDetail({
   pace,
   notesCount,
   recentNotes,
+  latestFinishedReading,
 }: BookDetailProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -140,6 +142,9 @@ export function BookDetail({
   const statSessionsValue = stats ? String(stats.sessionCount) : "—";
   const statSpeedValue = stats?.pagesPerHour != null ? String(stats.pagesPerHour) : "—";
   const statAvgValue = stats?.avgSessionMinutes != null ? String(stats.avgSessionMinutes) : "—";
+  const hasWrapupData =
+    latestFinishedReading != null &&
+    (latestFinishedReading.rating != null || Boolean(latestFinishedReading.review) || Boolean(latestFinishedReading.summary));
 
   return (
     <AppShell today={today}>
@@ -168,9 +173,19 @@ export function BookDetail({
       </div>
 
       {justFinished && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border-[1.5px] border-ok bg-surface p-3.5">
-          <Icon name="check" width={18} height={18} className="shrink-0 text-ok" />
-          <p className="font-serif text-sm font-bold text-ok">{t.book.finishedBanner}</p>
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border-[1.5px] border-ok bg-surface p-3.5">
+          <div className="flex items-center gap-2">
+            <Icon name="check" width={18} height={18} className="shrink-0 text-ok" />
+            <p className="font-serif text-sm font-bold text-ok">{t.book.finishedBanner}</p>
+          </div>
+          {latestFinishedReading && (
+            <Link
+              href={`/books/${book.id}/finish?reading=${latestFinishedReading.id}`}
+              className="shrink-0 font-mono text-xs text-accent underline-offset-4 hover:underline"
+            >
+              {t.book.rateCta}
+            </Link>
+          )}
         </div>
       )}
 
@@ -368,6 +383,65 @@ export function BookDetail({
               )}
             </div>
           </div>
+
+          {latestFinishedReading && (
+            <section className="rounded-xl border border-line bg-surface p-4 lg:p-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.book.wrapupTitle}</p>
+                {hasWrapupData && (
+                  <Link
+                    href={`/books/${book.id}/finish?reading=${latestFinishedReading.id}`}
+                    className="font-mono text-xs text-muted underline-offset-4 hover:underline"
+                  >
+                    {t.book.edit}
+                  </Link>
+                )}
+              </div>
+              {hasWrapupData ? (
+                <div className="flex flex-col gap-3">
+                  {latestFinishedReading.rating != null && (
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => {
+                        const filled = n <= latestFinishedReading.rating!;
+                        return (
+                          <Icon
+                            key={n}
+                            name="favorite"
+                            width={20}
+                            height={20}
+                            className={filled ? "text-accent" : "text-stitch"}
+                            style={filled ? { fill: "currentColor" } : { fill: "none", strokeDasharray: "2 2" }}
+                          />
+                        );
+                      })}
+                      <span className="ml-1 font-mono text-xs text-muted">
+                        {formatTemplate(t.book.wrapupRatingCaption, { rating: latestFinishedReading.rating })}
+                      </span>
+                    </div>
+                  )}
+                  {latestFinishedReading.review && (
+                    <div>
+                      <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.book.reviewLabel}</p>
+                      <p className="font-serif text-base text-text">{latestFinishedReading.review}</p>
+                    </div>
+                  )}
+                  {latestFinishedReading.summary && (
+                    <div>
+                      <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.book.takeawayLabel}</p>
+                      <p className="font-serif text-base text-text">{latestFinishedReading.summary}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  href={`/books/${book.id}/finish?reading=${latestFinishedReading.id}`}
+                  className="flex h-12 w-full items-center justify-center rounded-xl border-[1.5px] border-dashed border-stitch bg-surface font-serif text-sm text-text"
+                >
+                  {t.book.rateCta}
+                </Link>
+              )}
+            </section>
+          )}
 
           <section className="rounded-xl border border-line bg-surface p-4 lg:p-5">
             <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">

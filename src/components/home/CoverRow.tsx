@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Cover } from "@/components/ui/Cover";
+import { Icon } from "@/components/ui/Icon";
 
 export type CoverRowItem = {
   id: string;
@@ -7,15 +8,17 @@ export type CoverRowItem = {
   author?: string | null;
   coverUrl?: string | null;
   badge?: number;
+  rating?: number | null;
 };
 
 type CoverRowProps = {
   items: CoverRowItem[];
   hrefFor: (id: string) => string;
   badgeLabel?: (badge: number) => string;
+  ratingLabel?: (rating: number) => string;
 };
 
-export function CoverRow({ items, hrefFor, badgeLabel }: CoverRowProps) {
+export function CoverRow({ items, hrefFor, badgeLabel, ratingLabel }: CoverRowProps) {
   return (
     <div className="-mx-1.5 -mt-1.5 flex gap-3 overflow-x-auto px-1.5 pb-6 pt-1.5">
       {items.map((item) => (
@@ -33,6 +36,15 @@ export function CoverRow({ items, hrefFor, badgeLabel }: CoverRowProps) {
           </div>
           <p className="truncate font-serif text-sm font-bold text-text">{item.title}</p>
           {item.author && <p className="truncate font-mono text-xs text-muted">{item.author}</p>}
+          {item.rating != null && (
+            <p
+              className="flex items-center gap-1 font-mono text-xs text-accent"
+              aria-label={ratingLabel?.(item.rating)}
+            >
+              <Icon name="favorite" width={12} height={12} className="shrink-0" style={{ fill: "currentColor" }} />
+              {item.rating}
+            </p>
+          )}
         </Link>
       ))}
     </div>
