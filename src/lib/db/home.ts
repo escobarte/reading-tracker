@@ -189,6 +189,7 @@ async function fetchRecentSection(): Promise<HomeRecentBook[]> {
     .from("readings")
     .select("book_id, finished_at, rating")
     .not("finished_at", "is", null)
+    .eq("is_dropped", false)
     .order("finished_at", { ascending: false })
     .limit(30);
   if (readingsError) throw readingsError;

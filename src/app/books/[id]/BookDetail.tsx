@@ -15,13 +15,15 @@ import { Modal } from "@/components/ui/Modal";
 import { StatTile } from "@/components/ui/StatTile";
 import { StitchBar } from "@/components/ui/StitchBar";
 import { DeadlineDialog } from "@/components/goals/DeadlineDialog";
+import { PauseDropDialog } from "@/components/books/PauseDropDialog";
 import { NoteCard } from "@/components/notes/NoteCard";
 import { NoteEditorDialog, type NoteEditorTrigger } from "@/components/notes/NoteEditorDialog";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount } from "@/i18n/plural";
-import { formatDeadlineDayMonth, formatHoursMinutes, localDateKey } from "@/lib/time";
+import { formatDeadlineDayMonth, formatHoursMinutes, formatShortDateWithYear, localDateKey } from "@/lib/time";
 import { forecastFinishDate } from "@/lib/stats";
+import { pauseReasonLabel } from "@/lib/pause-reasons";
 import { toggleNoteFavoriteAction } from "@/app/notes/actions";
 import type { NoteWithPhoto } from "@/lib/db/notes";
 import type { Book, BookShelf, Reading, ReadingSession } from "@/lib/db/types";
@@ -41,6 +43,7 @@ type BookDetailProps = {
   notesCount: number;
   recentNotes: NoteWithPhoto[];
   latestFinishedReading: Reading | null;
+  pauseInfo: { reasonCode: string | null; note: string | null; stoppedAt: string | null } | null;
 };
 
 export function BookDetail({
@@ -55,6 +58,7 @@ export function BookDetail({
   notesCount,
   recentNotes,
   latestFinishedReading,
+  pauseInfo,
 }: BookDetailProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -66,6 +70,8 @@ export function BookDetail({
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteTrigger, setNoteTrigger] = useState<NoteEditorTrigger | null>(null);
+  const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
+  const [pauseDialogMode, setPauseDialogMode] = useState<"pause" | "drop">("pause");
   const canSetDeadline = Boolean(readingId && book.total_pages);
 
   function openAddNote() {
@@ -87,6 +93,7 @@ export function BookDetail({
     want: t.library.shelfWant,
     done: t.library.shelfDone,
     paused: t.library.shelfPaused,
+    dropped: t.library.shelfDropped,
   };
   const formatLabel =
     book.format === "paper" ? t.library.filterFormatPaper : t.library.filterFormatEbook;
@@ -103,11 +110,29 @@ export function BookDetail({
       setRereadDialogOpen(true);
       return;
     }
+    if (shelf === "paused" || shelf === "dropped") {
+      setPauseDialogMode(shelf === "paused" ? "pause" : "drop");
+      setPauseDialogOpen(true);
+      return;
+    }
     handleShelfChange(shelf);
   }
 
   function handleContinueReading() {
     setRereadDialogOpen(false);
+    setBook((prev) => ({ ...prev, shelf: "reading" }));
+    startTransition(() => {
+      continueLastReadingAction(book.id).then(() => router.refresh());
+    });
+  }
+
+  function handlePauseDialogSaved() {
+    setPauseDialogOpen(false);
+    setBook((prev) => ({ ...prev, shelf: pauseDialogMode === "pause" ? "paused" : "dropped" }));
+    router.refresh();
+  }
+
+  function handleContinueFromPause() {
     setBook((prev) => ({ ...prev, shelf: "reading" }));
     startTransition(() => {
       continueLastReadingAction(book.id).then(() => router.refresh());
@@ -189,6 +214,23 @@ export function BookDetail({
         </div>
       )}
 
+      {(book.shelf === "paused" || book.shelf === "dropped") && (
+        <div className="mb-5 rounded-xl border-[1.5px] border-dashed border-stitch bg-surface p-3.5">
+          <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">
+            {book.shelf === "paused" ? t.book.pausedBannerTitle : t.book.droppedBannerTitle}
+          </p>
+          <p className="mt-1 font-serif text-base text-text">
+            {pauseInfo?.reasonCode ? pauseReasonLabel(pauseInfo.reasonCode, t) : t.book.pauseReasonNone}
+            {pauseInfo?.note ? ` · ${pauseInfo.note}` : ""}
+          </p>
+          {pauseInfo?.stoppedAt && (
+            <p className="mt-1 font-mono text-xs text-muted">
+              {formatTemplate(t.book.pauseStoppedOn, { date: formatShortDateWithYear(pauseInfo.stoppedAt, locale) })}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col items-center gap-4 pb-6 text-center lg:flex-row lg:items-start lg:gap-6 lg:text-left">
         <div className="flex w-full max-w-[340px] shrink-0 flex-col items-center gap-4 text-center lg:items-start lg:rounded-xl lg:border lg:border-line lg:bg-surface lg:p-5 lg:text-left lg:shadow-[var(--shadow-hero)]">
           <Cover title={book.title} coverUrl={book.cover_url ?? undefined} size="book" />
@@ -216,6 +258,11 @@ export function BookDetail({
                 <Icon name="start" width={18} height={18} />
                 {t.book.rereadButton}
               </Button>
+            ) : book.shelf === "paused" || book.shelf === "dropped" ? (
+              <Button className="h-14 w-full gap-2 text-lg" onClick={handleContinueFromPause}>
+                <Icon name="start" width={18} height={18} />
+                {t.book.continueButton}
+              </Button>
             ) : (
               <Link href={`/session?book=${book.id}`} className="w-full">
                 <Button className="h-14 w-full gap-2 text-lg">
@@ -233,7 +280,7 @@ export function BookDetail({
               }
               wrapperClassName="relative block w-full"
               triggerClassName="flex h-13 w-full items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-line bg-surface px-4 font-serif text-base text-text"
-              items={(["want", "reading", "done", "paused"] as BookShelf[]).map((value) => ({
+              items={(["want", "reading", "done", "paused", "dropped"] as BookShelf[]).map((value) => ({
                 label: shelfLabels[value],
                 active: book.shelf === value,
                 onSelect: () => handleShelfSelect(value),
@@ -471,6 +518,18 @@ export function BookDetail({
           </section>
         </div>
       </div>
+
+      <PauseDropDialog
+        open={pauseDialogOpen}
+        onClose={() => setPauseDialogOpen(false)}
+        initialMode={pauseDialogMode}
+        bookId={book.id}
+        bookTitle={book.title}
+        coverUrl={book.cover_url}
+        currentPage={currentPage}
+        totalPages={book.total_pages}
+        onSaved={handlePauseDialogSaved}
+      />
 
       {canSetDeadline && readingId && (
         <DeadlineDialog

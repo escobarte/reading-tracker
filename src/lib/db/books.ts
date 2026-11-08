@@ -193,6 +193,26 @@ export async function moveShelf(id: string, shelf: BookShelf): Promise<void> {
   const supabase = await createClient();
 
   if (shelf === "want") {
+    const { data: openReading, error: findError } = await supabase
+      .from("readings")
+      .select("id")
+      .eq("book_id", id)
+      .is("finished_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (findError) throw findError;
+
+    if (openReading) {
+      // Закрыт без пометки "дочитано": is_dropped держит его вне статистики и «Прочитано»,
+      // книга просто вернулась в очередь без сохранённого прогресса чтения.
+      const { error: closeError } = await supabase
+        .from("readings")
+        .update({ finished_at: new Date().toISOString(), is_dropped: true })
+        .eq("id", openReading.id);
+      if (closeError) throw closeError;
+    }
+
     const queue_position = await nextQueuePosition(supabase);
     const { error } = await supabase
       .from("books")
@@ -263,7 +283,8 @@ export async function moveShelf(id: string, shelf: BookShelf): Promise<void> {
     return;
   }
 
-  // paused
+  // paused / dropped without a reason — the usual paths go through pauseReading/dropReading instead,
+  // which also set the reason and close/keep the reading; this is a plain shelf move.
   const { error } = await supabase.from("books").update({ shelf, queue_position: null }).eq("id", id);
   if (error) throw error;
   await renumberQueue(supabase);

@@ -75,7 +75,11 @@ export async function getStatsData(period: Period, anchor: string): Promise<Stat
   const range = periodRange(period, anchor);
 
   let sessionsQuery = supabase.from("sessions").select("started_at, pages_read, seconds");
-  let readingsQuery = supabase.from("readings").select("finished_at").not("finished_at", "is", null);
+  let readingsQuery = supabase
+    .from("readings")
+    .select("finished_at")
+    .not("finished_at", "is", null)
+    .eq("is_dropped", false);
   if (range) {
     const bounds = rangeBoundsUtc(range.startKey, range.endKey);
     sessionsQuery = sessionsQuery.gte("started_at", bounds.gte).lt("started_at", bounds.lt);
@@ -318,6 +322,7 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
       .from("readings")
       .select("id, started_at, finished_at, book_id")
       .not("finished_at", "is", null)
+      .eq("is_dropped", false)
       .gte("finished_at", bounds.gte)
       .lt("finished_at", bounds.lt),
     supabase.from("sessions").select("started_at").order("started_at", { ascending: true }).limit(1).maybeSingle(),

@@ -14,6 +14,10 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
 
   const reading = await getLatestReading(id);
   const openReading = reading && !reading.finished_at && book.shelf === "reading" ? reading : null;
+  const pauseInfo =
+    reading && (book.shelf === "paused" || book.shelf === "dropped")
+      ? { reasonCode: reading.pause_reason, note: reading.pause_note, stoppedAt: reading.stopped_at }
+      : null;
 
   const [currentPage, stats, sessions, deadline, goal, today, pace, notesCount, recentNotes, latestFinishedReading] =
     await Promise.all([
@@ -42,6 +46,7 @@ export default async function BookPage({ params }: PageProps<"/books/[id]">) {
       notesCount={notesCount}
       recentNotes={recentNotes}
       latestFinishedReading={latestFinishedReading}
+      pauseInfo={pauseInfo}
     />
   );
 }

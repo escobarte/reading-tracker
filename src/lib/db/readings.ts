@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { localYear } from "@/lib/time";
+import type { PauseReasonCode } from "@/lib/pause-reasons";
 import { setShelf } from "./books";
 import type { Reading } from "./types";
 
@@ -31,7 +32,7 @@ export async function getLatestReading(bookId: string): Promise<Reading | null> 
   return data;
 }
 
-/** Последнее закрытое прочтение книги — то, для которого показывается экран «Книга прочитана». */
+/** Последнее закрытое прочтение книги (не брошенное) — то, для которого показывается экран «Книга прочитана». */
 export async function getLatestFinishedReading(bookId: string): Promise<Reading | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -39,6 +40,7 @@ export async function getLatestFinishedReading(bookId: string): Promise<Reading 
     .select("*")
     .eq("book_id", bookId)
     .not("finished_at", "is", null)
+    .eq("is_dropped", false)
     .order("finished_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -78,10 +80,14 @@ export async function saveReadingWrapup(readingId: string, input: ReadingWrapupI
   return data;
 }
 
-/** Число прочтений, закрытых в текущем календарном году (Europe/Bucharest) — для годовой цели. */
+/** Число прочтений, закрытых в текущем календарном году (Europe/Bucharest) — для годовой цели. Брошенные не считаются. */
 export async function getFinishedThisYearCount(): Promise<number> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("readings").select("finished_at").not("finished_at", "is", null);
+  const { data, error } = await supabase
+    .from("readings")
+    .select("finished_at")
+    .not("finished_at", "is", null)
+    .eq("is_dropped", false);
   if (error) throw error;
 
   const currentYear = localYear(new Date());
@@ -132,7 +138,10 @@ export async function reopenReading(readingId: string, bookId: string): Promise<
   await setShelf(bookId, "reading");
 }
 
-/** "Продолжить это прочтение": clears finished_at on the book's most recent reading. */
+/**
+ * "Продолжить это прочтение": clears finished_at on the book's most recent reading and the
+ * pause/drop markers, if any — also used to resume a paused or return a dropped book.
+ */
 export async function continueLastReading(bookId: string): Promise<void> {
   const supabase = await createClient();
   const { data: reading, error } = await supabase
@@ -147,10 +156,90 @@ export async function continueLastReading(bookId: string): Promise<void> {
   if (reading) {
     const { error: updateError } = await supabase
       .from("readings")
-      .update({ finished_at: null })
+      .update({ finished_at: null, is_dropped: false, stopped_at: null, pause_reason: null, pause_note: null })
       .eq("id", reading.id);
     if (updateError) throw updateError;
   }
 
   await setShelf(bookId, "reading");
+}
+
+const PAUSE_NOTE_MAX = 1000;
+
+function clampPauseNote(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.slice(0, PAUSE_NOTE_MAX);
+}
+
+function requireNoteForOther(reasonCode: PauseReasonCode | null, note: string | null): void {
+  if (reasonCode === "other" && !note) {
+    throw new Error('A note is required for the "other" reason.');
+  }
+}
+
+/** Пауза: прочтение остаётся открытым, прогресс и сессии целы — книга уходит на «Отложено». */
+export async function pauseReading(
+  bookId: string,
+  reasonCode: PauseReasonCode | null,
+  note: string | null,
+): Promise<void> {
+  const clampedNote = clampPauseNote(note);
+  requireNoteForOther(reasonCode, clampedNote);
+
+  const reading = await ensureOpenReading(bookId);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("readings")
+    .update({ pause_reason: reasonCode, pause_note: clampedNote, stopped_at: new Date().toISOString() })
+    .eq("id", reading.id);
+  if (error) throw error;
+
+  await setShelf(bookId, "paused");
+}
+
+/** Отказ: прочтение закрывается датой остановки и помечается брошенным — в «Прочитано» не попадает. */
+export async function dropReading(
+  bookId: string,
+  reasonCode: PauseReasonCode | null,
+  note: string | null,
+): Promise<void> {
+  const clampedNote = clampPauseNote(note);
+  requireNoteForOther(reasonCode, clampedNote);
+
+  const reading = await ensureOpenReading(bookId);
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("readings")
+    .update({
+      finished_at: now,
+      is_dropped: true,
+      pause_reason: reasonCode,
+      pause_note: clampedNote,
+      stopped_at: now,
+    })
+    .eq("id", reading.id);
+  if (error) throw error;
+
+  await setShelf(bookId, "dropped");
+}
+
+/** Самое свежее прочтение каждой книги (открытое или закрытое) — для карточек архива в Библиотеке, одним запросом. */
+export async function getLatestReadingByBook(bookIds: string[]): Promise<Map<string, Reading>> {
+  if (bookIds.length === 0) return new Map();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("readings")
+    .select("*")
+    .in("book_id", bookIds)
+    .order("started_at", { ascending: false });
+  if (error) throw error;
+
+  const byBookId = new Map<string, Reading>();
+  for (const reading of data ?? []) {
+    if (!byBookId.has(reading.book_id)) byBookId.set(reading.book_id, reading);
+  }
+  return byBookId;
 }

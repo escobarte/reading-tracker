@@ -1,5 +1,5 @@
 export type BookFormat = "paper" | "ebook";
-export type BookShelf = "want" | "reading" | "done" | "paused";
+export type BookShelf = "want" | "reading" | "done" | "paused" | "dropped";
 
 export type Book = {
   id: string;
@@ -32,7 +32,12 @@ export type Reading = {
   /** «Что я понял» — итог прочтения. */
   summary: string | null;
   review: string | null;
+  /** Код причины паузы/отказа (`pause_*` или `drop_*`, или `other`). */
   pause_reason: string | null;
+  pause_note: string | null;
+  stopped_at: string | null;
+  /** true только для прочтений, закрытых отказом — такие не считаются прочитанными книгами. */
+  is_dropped: boolean;
 };
 
 export type SessionSource = "timer" | "manual";

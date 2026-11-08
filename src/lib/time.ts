@@ -181,6 +181,11 @@ export function formatShortDate(date: Date | string, locale: "ru" | "en"): strin
   }).format(d);
 }
 
+/** Day + short month + year, e.g. "3 нояб. 2026" / "3 Nov 2026", for archive cards. */
+export function formatShortDateWithYear(date: Date | string, locale: "ru" | "en"): string {
+  return `${formatShortDate(date, locale)} ${localYear(date)}`;
+}
+
 /** Local hour of day (0–23) for the given instant, in `timeZone`. */
 export function localHour(date: Date = new Date(), timeZone = APP_TIMEZONE): number {
   return Number(
