@@ -8,24 +8,23 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount } from "@/i18n/plural";
 import { formatDeadlineDayMonth } from "@/lib/time";
-import type { HomeData, HomeReadingBook } from "@/lib/db/home";
+import type { HomeDeadline, HomeReadingBook } from "@/lib/db/home";
 
 type DeadlineSectionProps = {
-  deadline: HomeData["deadline"];
-  reading: HomeReadingBook[];
+  deadlines: HomeDeadline[];
+  activeBook: HomeReadingBook | null;
 };
 
 /**
- * Единственный слот «Дедлайн» на главной: показывает дедлайн первой (по порядку
- * карусели «Сейчас читаешь») книги, у которой он задан — без синхронизации со
- * свайпом карусели (в макете `home-light.png` блок один, листания нет).
+ * Единственный слот «Дедлайн» на главной: показывает дедлайн книги, которая сейчас
+ * видна в карусели «Сейчас читаешь» (синхронизировано со свайпом через activeBook).
  */
-export function DeadlineSection({ deadline, reading }: DeadlineSectionProps) {
+export function DeadlineSection({ deadlines, activeBook }: DeadlineSectionProps) {
   const { t, locale } = useLocale();
   const [open, setOpen] = useState(false);
 
-  const fallbackBook = reading.find((book) => book.totalPages) ?? null;
-  const target = deadline ? reading.find((book) => book.id === deadline.bookId) ?? fallbackBook : fallbackBook;
+  const deadline = activeBook ? deadlines.find((entry) => entry.bookId === activeBook.id) ?? null : null;
+  const target = activeBook;
 
   if (!target) {
     return (

@@ -14,12 +14,22 @@ import { formatClock } from "@/lib/time";
 import { elapsedSeconds, readActiveSession, type ActiveSession } from "@/lib/active-session";
 import type { HomeReadingBook } from "@/lib/db/home";
 
-export function HeroCarousel({ books }: { books: HomeReadingBook[] }) {
+export function HeroCarousel({
+  books,
+  onActiveIndexChange,
+}: {
+  books: HomeReadingBook[];
+  onActiveIndexChange?: (index: number) => void;
+}) {
   const { t } = useLocale();
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    onActiveIndexChange?.(activeIndex);
+  }, [activeIndex, onActiveIndexChange]);
 
   useEffect(() => {
     let cancelled = false;

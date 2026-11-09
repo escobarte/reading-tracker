@@ -53,7 +53,8 @@ export type HomeData = {
   queue: HomeQueueBook[];
   year: { finishedCount: number; goal: number };
   recent: HomeRecentBook[];
-  deadline: HomeDeadline | null;
+  /** Дедлайны всех читаемых книг (только у кого задан), чтобы блок «Дедлайн» синхронизировался со свайпом карусели. */
+  deadlines: HomeDeadline[];
   quoteOfDay: NoteWithBook | null;
 };
 
@@ -117,14 +118,17 @@ async function fetchReadingSection(): Promise<HomeReadingBook[]> {
     });
 }
 
-/** Дедлайн первой (по порядку карусели) из читаемых книг, у которой он задан — единственный слот на главной. */
-async function fetchDeadlineSection(reading: HomeReadingBook[]): Promise<HomeDeadline | null> {
-  for (const book of reading) {
-    if (!book.readingId || !book.totalPages) continue;
-    const computed = await getDeadlineForReading(book.readingId, book.totalPages);
-    if (computed) return { ...computed, bookId: book.id, bookTitle: book.title, readingId: book.readingId };
-  }
-  return null;
+/** Дедлайны всех читаемых книг, у кого он задан — блок на главной показывает дедлайн книги, видимой в карусели. */
+async function fetchDeadlineSection(reading: HomeReadingBook[]): Promise<HomeDeadline[]> {
+  const results = await Promise.all(
+    reading
+      .filter((book) => book.readingId && book.totalPages)
+      .map(async (book) => {
+        const computed = await getDeadlineForReading(book.readingId, book.totalPages as number);
+        return computed ? { ...computed, bookId: book.id, bookTitle: book.title, readingId: book.readingId } : null;
+      }),
+  );
+  return results.filter((result): result is HomeDeadline => result !== null);
 }
 
 async function fetchQueueSection(): Promise<HomeQueueBook[]> {
@@ -236,7 +240,7 @@ export async function getHomeData(): Promise<HomeData> {
     getQuoteOfDay(),
   ]);
 
-  const [week, year, deadline] = await Promise.all([
+  const [week, year, deadlines] = await Promise.all([
     fetchWeekSection(dailyGoal),
     fetchYearSection(yearGoal),
     fetchDeadlineSection(reading),
@@ -250,7 +254,7 @@ export async function getHomeData(): Promise<HomeData> {
     queue,
     year,
     recent,
-    deadline,
+    deadlines,
     quoteOfDay,
   };
 }

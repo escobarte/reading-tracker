@@ -7,19 +7,21 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Личный учёт чтения книг",
     start_url: "/",
     display: "standalone",
-    background_color: "#e6d8bd", // --bg, light theme
-    theme_color: "#a2461f", // --accent, light theme
+    background_color: "#e6d8bd", // --bg, light theme (фон холста)
+    theme_color: "#f4ead6", // --surface, light theme (поверхность)
     lang: "ru",
     icons: [
       {
         src: "/icons/icon-192.png",
         sizes: "192x192",
         type: "image/png",
+        purpose: "any",
       },
       {
         src: "/icons/icon-512.png",
         sizes: "512x512",
         type: "image/png",
+        purpose: "any",
       },
       {
         src: "/icons/icon-maskable-512.png",

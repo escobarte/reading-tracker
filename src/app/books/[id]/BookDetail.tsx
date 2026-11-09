@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Cover } from "@/components/ui/Cover";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { GoalCard } from "@/components/ui/GoalCard";
@@ -72,6 +73,7 @@ export function BookDetail({
   const [noteTrigger, setNoteTrigger] = useState<NoteEditorTrigger | null>(null);
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
   const [pauseDialogMode, setPauseDialogMode] = useState<"pause" | "drop">("pause");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const canSetDeadline = Boolean(readingId && book.total_pages);
 
   function openAddNote() {
@@ -144,11 +146,8 @@ export function BookDetail({
     handleShelfChange("reading");
   }
 
-  function handleDelete() {
-    if (!window.confirm(t.book.deleteConfirm)) return;
-    startTransition(() => {
-      deleteBookAction(book.id).then(() => router.push("/library"));
-    });
+  function handleDeleteConfirmed() {
+    return deleteBookAction(book.id).then(() => router.push("/library"));
   }
 
   const percent = book.total_pages ? Math.min(100, Math.round((currentPage / book.total_pages) * 100)) : 0;
@@ -192,7 +191,7 @@ export function BookDetail({
           items={[
             { label: t.book.edit, onSelect: () => router.push(`/books/${book.id}/edit`) },
             { label: t.book.manualSession, onSelect: () => router.push(`/session/manual?book=${book.id}`) },
-            { label: t.book.delete, onSelect: handleDelete, variant: "danger" },
+            { label: t.book.delete, onSelect: () => setDeleteDialogOpen(true), variant: "danger" },
           ]}
         />
       </div>
@@ -518,6 +517,16 @@ export function BookDetail({
           </section>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDeleteConfirmed}
+        titleId="delete-book-dialog-title"
+        title={t.book.deleteConfirmTitle}
+        description={t.book.deleteConfirmBody}
+        confirmLabel={t.book.deleteConfirmButton}
+      />
 
       <PauseDropDialog
         open={pauseDialogOpen}

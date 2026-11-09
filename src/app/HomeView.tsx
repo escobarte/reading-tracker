@@ -31,6 +31,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+  const [activeBookIndex, setActiveBookIndex] = useState(0);
 
   const quote = data.quoteOfDay;
   const quoteCaption = quote
@@ -76,7 +77,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
 
       <div className="grid grid-cols-1 gap-4 pb-10 lg:grid-cols-3 lg:gap-6">
         <div className="order-1 lg:order-1 lg:col-span-2">
-          <HeroCarousel books={data.reading} />
+          <HeroCarousel books={data.reading} onActiveIndexChange={setActiveBookIndex} />
         </div>
 
         <div className="order-2 grid grid-cols-2 gap-3 lg:order-2 lg:col-span-1 lg:flex lg:flex-col">
@@ -108,7 +109,7 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
         </div>
 
         <div className="order-3 lg:order-3 lg:col-span-1">
-          <DeadlineSection deadline={data.deadline} reading={data.reading} />
+          <DeadlineSection deadlines={data.deadlines} activeBook={data.reading[activeBookIndex] ?? null} />
         </div>
 
         <div className="order-5 lg:order-4 lg:col-span-1">

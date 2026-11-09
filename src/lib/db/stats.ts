@@ -267,6 +267,7 @@ type ClosedReadingRow = {
   started_at: string | null;
   finished_at: string | null;
   book_id: string;
+  rating: number | null;
 };
 
 type BookGenreRow = {
@@ -286,6 +287,8 @@ export type YearSummaryData = {
   maxYear: number;
   goal: { finished: number; goal: number; daysLeftInYear: number | null };
   tiles: { pages: number; hours: number; daysWithReading: number; elapsedDaysInYear: number; sessions: number };
+  /** Средняя оценка по прочтениям года с оценкой (брошенные уже не входят в closedReadings); `null`, если нет ни одной оценки. */
+  avgRating: number | null;
   longestBook: {
     bookId: string;
     title: string;
@@ -320,7 +323,7 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
     supabase.from("sessions").select("started_at, pages_read, seconds").gte("started_at", bounds.gte).lt("started_at", bounds.lt),
     supabase
       .from("readings")
-      .select("id, started_at, finished_at, book_id")
+      .select("id, started_at, finished_at, book_id, rating")
       .not("finished_at", "is", null)
       .eq("is_dropped", false)
       .gte("finished_at", bounds.gte)
@@ -383,8 +386,14 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
   const booksByMonth = Array(12).fill(0) as number[];
   let longestBook: YearSummaryData["longestBook"] = null;
   const genreInputs: (string | null | undefined)[] = [];
+  let ratingSum = 0;
+  let ratingCount = 0;
 
   for (const reading of closedReadings) {
+    if (reading.rating != null) {
+      ratingSum += reading.rating;
+      ratingCount += 1;
+    }
     const finishedKey = localDateKey(reading.finished_at!);
     const monthIndex = Number(finishedKey.slice(5, 7)) - 1;
     booksByMonth[monthIndex] += 1;
@@ -433,6 +442,7 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
       elapsedDaysInYear,
       sessions: sessionCount,
     },
+    avgRating: ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : null,
     longestBook,
     genre,
     booksByMonth,

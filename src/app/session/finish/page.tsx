@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -38,6 +39,7 @@ export default function SessionFinishPage() {
   const [pending, setPending] = useState(false);
   const [now] = useState(() => Date.now());
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,8 +152,7 @@ export default function SessionFinishPage() {
     }
   }
 
-  function handleDelete() {
-    if (!window.confirm(t.sessionFinish.deleteConfirm)) return;
+  function handleDeleteConfirmed() {
     clearActiveSession();
     router.push(`/books/${book!.id}`);
   }
@@ -243,11 +244,21 @@ export default function SessionFinishPage() {
       </Button>
       <button
         type="button"
-        onClick={handleDelete}
+        onClick={() => setDeleteDialogOpen(true)}
         className="mt-3 h-11 w-full text-center font-serif text-sm text-muted underline-offset-4 hover:underline"
       >
         {t.sessionFinish.delete}
       </button>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDeleteConfirmed}
+        titleId="delete-session-dialog-title"
+        title={t.sessionFinish.deleteConfirmTitle}
+        description={t.sessionFinish.deleteConfirmBody}
+        confirmLabel={t.sessionFinish.deleteConfirmButton}
+      />
     </AppShell>
   );
 }

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
@@ -30,6 +31,7 @@ export function SessionEditForm({ session, book }: { session: ReadingSession; bo
   const [pageTo, setPageTo] = useState(session.page_to ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const totalPages = book.total_pages;
   const canPercent = book.format === "ebook" && Boolean(totalPages);
@@ -77,8 +79,7 @@ export function SessionEditForm({ session, book }: { session: ReadingSession; bo
     }
   }
 
-  async function handleDelete() {
-    if (!window.confirm(t.sessionFinish.deleteConfirm)) return;
+  async function handleDeleteConfirmed() {
     setPending(true);
     try {
       const result = await deleteSessionAction(session.id, book.id, session.reading_id);
@@ -188,12 +189,22 @@ export function SessionEditForm({ session, book }: { session: ReadingSession; bo
       </Button>
       <button
         type="button"
-        onClick={handleDelete}
+        onClick={() => setDeleteDialogOpen(true)}
         disabled={pending}
         className="mt-3 h-11 w-full text-center font-serif text-sm text-muted underline-offset-4 hover:underline disabled:opacity-50"
       >
         {t.sessionFinish.delete}
       </button>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDeleteConfirmed}
+        titleId="delete-session-dialog-title"
+        title={t.sessionFinish.deleteConfirmTitle}
+        description={t.sessionFinish.deleteConfirmBody}
+        confirmLabel={t.sessionFinish.deleteConfirmButton}
+      />
     </AppShell>
   );
 }

@@ -24,7 +24,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#a2461f", // --accent, light theme
+  themeColor: "#f4ead6", // --surface, light theme
 };
 
 function readTheme(value: string | undefined): Theme {

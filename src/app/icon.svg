@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" rx="112" fill="#e6d8bd"/><rect x="14" y="14" width="484" height="484" rx="100" fill="none" stroke="#8c7650" stroke-width="5" stroke-dasharray="16 12" stroke-linecap="round"/>
+<g transform="translate(256 256) scale(0.92) translate(-256 -256)">
+  <!-- back cover -->
+  <path d="M96 156 L96 372 Q96 388 112 388 L256 388 L400 388 Q416 388 416 372 L416 156 Z" fill="#6e2f17" stroke="#2b2218" stroke-width="10" stroke-linejoin="round"/>
+  <!-- left page -->
+  <path d="M256 392 L256 140 Q200 108 112 128 L112 360 Q200 340 256 392 Z" fill="#f4ead6" stroke="#2b2218" stroke-width="10" stroke-linejoin="round"/>
+  <!-- right page -->
+  <path d="M256 392 L256 140 Q312 108 400 128 L400 360 Q312 340 256 392 Z" fill="#f4ead6" stroke="#2b2218" stroke-width="10" stroke-linejoin="round"/>
+  <!-- stitched seam -->
+  <path d="M256 150 L256 380" stroke="#8c7650" stroke-width="6" stroke-dasharray="14 12" stroke-linecap="round" fill="none"/>
+  <!-- text lines -->
+  <g stroke="#b3a284" stroke-width="8" stroke-linecap="round"><path d="M138 176 L226 186"/><path d="M138 206 L226 216"/><path d="M286 186 L374 176"/><path d="M286 216 L374 206"/></g>
+  <!-- progress stitches -->
+  <rect x="148.0" y="298" width="19" height="10" rx="5" fill="#a2461f"/><rect x="170.5" y="298" width="19" height="10" rx="5" fill="#a2461f"/><rect x="193.0" y="298" width="19" height="10" rx="5" fill="#a2461f"/><rect x="215.5" y="298" width="19" height="10" rx="5" fill="#a2461f"/><rect x="238.0" y="298" width="19" height="10" rx="5" fill="#a2461f"/><rect x="260.5" y="298" width="19" height="10" rx="5" fill="#a2461f"/><rect x="283.0" y="298" width="19" height="10" rx="5" fill="#a2461f"/><rect x="305.5" y="298" width="19" height="10" rx="5" fill="#c9b58f"/><rect x="328.0" y="298" width="19" height="10" rx="5" fill="#c9b58f"/><rect x="350.5" y="298" width="19" height="10" rx="5" fill="#c9b58f"/>
+  <!-- bookmark -->
+  <path d="M338 128 L338 196 L356 180 L374 196 L374 132" fill="#a2461f" stroke="#2b2218" stroke-width="6" stroke-linejoin="round"/>
+</g></svg>

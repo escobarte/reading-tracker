@@ -102,7 +102,13 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
         const book = await resolveBook(requestedId);
         if (cancelled) return;
         if (book) {
-          await startNewSession(book);
+          if (book.shelf === "reading") {
+            await startNewSession(book);
+          } else {
+            // Книга не на полке «Читаю» (прочитана, в очереди, на паузе или брошена):
+            // не создаём прочтение молча, ведём на страницу книги за понятным действием.
+            router.replace(`/books/${book.id}`);
+          }
           return;
         }
       }
@@ -190,7 +196,8 @@ export function SessionView({ books, readingBooks, queueBooks }: SessionViewProp
               className="w-full"
               onClick={() => {
                 clearActiveSession();
-                if (requestedBook) startNewSession(requestedBook);
+                if (requestedBook && requestedBook.shelf === "reading") startNewSession(requestedBook);
+                else if (requestedBook) router.push(`/books/${requestedBook.id}`);
                 else setPhase({ kind: "picker" });
               }}
             >

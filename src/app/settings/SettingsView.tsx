@@ -100,28 +100,6 @@ export function SettingsView({ dailyGoal, yearGoal, finishedThisYear, email, pro
               ]}
             />
           </section>
-
-          <section className="rounded-xl border border-line bg-surface p-4 opacity-60">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-serif text-lg font-bold text-text">{t.settings.reminderTitle}</p>
-              <span className="rounded-md border border-dashed border-stitch px-2.5 py-1 font-mono text-xs text-muted">
-                {t.settings.reminderSoon}
-              </span>
-            </div>
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                disabled
-                aria-label={t.settings.reminderToggleLabel}
-                className="h-7 w-12 shrink-0 rounded-full border border-line bg-surface-2 p-0.5"
-              >
-                <span className="block h-5 w-5 rounded-full bg-muted" />
-              </button>
-              <span className="rounded-md border border-line bg-input px-4 py-2 font-mono text-lg text-muted">
-                21:00
-              </span>
-            </div>
-          </section>
         </div>
 
         <div className="mt-4 flex flex-col gap-4 lg:mt-0">

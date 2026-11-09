@@ -29,6 +29,7 @@ export function YearSummaryView({ data, today }: YearSummaryViewProps) {
     maxYear,
     goal,
     tiles,
+    avgRating,
     longestBook,
     genre,
     booksByMonth,
@@ -124,8 +125,12 @@ export function YearSummaryView({ data, today }: YearSummaryViewProps) {
             <StatTile label={t.yearSummary.tileSessions} value={String(tiles.sessions)} />
           </div>
 
+          <div className="lg:col-span-3 lg:row-start-2">
+            <StatTile label={t.yearSummary.tileAvgRating} value={avgRating != null ? avgRating.toFixed(1) : "—"} />
+          </div>
+
           {longestBook && (
-            <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-1 lg:row-start-2 lg:p-5">
+            <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-1 lg:row-start-3 lg:p-5">
               <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.yearSummary.longestBookTitle}</p>
               <div className="mt-3 flex gap-3">
                 <Cover title={longestBook.title} coverUrl={longestBook.coverUrl ?? undefined} size="session" />
@@ -146,7 +151,7 @@ export function YearSummaryView({ data, today }: YearSummaryViewProps) {
           )}
 
           {genre ? (
-            <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-2 lg:row-start-2 lg:p-5">
+            <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-2 lg:row-start-3 lg:p-5">
               <div className="flex items-baseline justify-between">
                 <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.yearSummary.genreTitle}</p>
                 <p className="font-mono text-xs text-muted">{t.yearSummary.genreSubtitle}</p>
@@ -185,13 +190,13 @@ export function YearSummaryView({ data, today }: YearSummaryViewProps) {
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-2 lg:row-start-2 lg:p-5">
+            <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-2 lg:row-start-3 lg:p-5">
               <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.yearSummary.genreTitle}</p>
               <p className="mt-2 font-serif text-sm text-muted">{t.yearSummary.genreHint}</p>
             </div>
           )}
 
-          <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-3 lg:row-start-2 lg:p-5">
+          <div className="rounded-xl border border-line bg-surface p-4 lg:col-start-3 lg:row-start-3 lg:p-5">
             <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.yearSummary.recordsTitle}</p>
             <div className="mt-3 flex flex-col">
               <RecordRow
@@ -237,7 +242,7 @@ export function YearSummaryView({ data, today }: YearSummaryViewProps) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-line bg-surface p-4 lg:col-span-3 lg:row-start-3 lg:p-5">
+          <div className="rounded-xl border border-line bg-surface p-4 lg:col-span-3 lg:row-start-4 lg:p-5">
             <div className="flex items-baseline justify-between">
               <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.yearSummary.byMonthTitle}</p>
               {bestMonth && (
