@@ -421,6 +421,7 @@ const ru = {
     fieldAuthor: "Автор",
     fieldPages: "Страниц",
     fieldGenre: "Жанр",
+    genreUsedLabel: "Уже было",
     fieldSeries: "Серия",
     fieldSeriesNumber: "Том",
     fieldTags: "Теги",

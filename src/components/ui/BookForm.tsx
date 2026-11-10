@@ -1,7 +1,8 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "./Button";
+import { GenreField } from "./GenreField";
 import { Input } from "./Input";
 import { SegmentedControl } from "./SegmentedControl";
 import { useLocale } from "@/i18n/LocaleProvider";
@@ -57,7 +58,6 @@ export function BookForm({
   genreSuggestions = [],
 }: BookFormProps) {
   const { t } = useLocale();
-  const genreListId = useId();
 
   const [title, setTitle] = useState(initial.title);
   const [author, setAuthor] = useState(initial.author);
@@ -144,19 +144,7 @@ export function BookForm({
         />
       )}
 
-      <Input
-        label={t.addbook.fieldGenre}
-        value={genre}
-        onChange={(e) => setGenre(e.target.value)}
-        list={genreSuggestions.length > 0 ? genreListId : undefined}
-      />
-      {genreSuggestions.length > 0 && (
-        <datalist id={genreListId}>
-          {genreSuggestions.map((suggestion) => (
-            <option key={suggestion} value={suggestion} />
-          ))}
-        </datalist>
-      )}
+      <GenreField label={t.addbook.fieldGenre} value={genre} onChange={setGenre} suggestions={genreSuggestions} />
 
       <div className="flex gap-3">
         <div className="flex-1">

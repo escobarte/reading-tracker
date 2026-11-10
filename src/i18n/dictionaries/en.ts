@@ -508,6 +508,7 @@ const en: Dictionary = {
     fieldAuthor: "Author",
     fieldPages: "Pages",
     fieldGenre: "Genre",
+    genreUsedLabel: "Already used",
     fieldSeries: "Series",
     fieldSeriesNumber: "Volume",
     fieldTags: "Tags",
