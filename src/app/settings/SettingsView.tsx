@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { GoalCard } from "@/components/ui/GoalCard";
 import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { DataSection } from "@/components/settings/DataSection";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { useTheme } from "@/lib/theme";
@@ -100,6 +101,8 @@ export function SettingsView({ dailyGoal, yearGoal, finishedThisYear, email, pro
               ]}
             />
           </section>
+
+          <DataSection />
         </div>
 
         <div className="mt-4 flex flex-col gap-4 lg:mt-0">

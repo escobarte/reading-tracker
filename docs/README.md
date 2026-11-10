@@ -12,7 +12,7 @@ The app only keeps records. There is no built-in reader: books are read on paper
 - **Goals:** a deadline per book (the daily page target is recalculated as you go), a daily page goal, and a yearly book goal.
 - **Statistics:** per session, day, week, month and year; reading speed, streak, a reading calendar, time of day, and a year in review.
 - **Notes and quotes:** quotes, thoughts and words, linked to a book and page. Photograph a page and extract text from it. Search, favorites, export to Markdown.
-- **Reminders:** an optional push notification at a time you choose.
+- **Your data:** export to JSON, CSV and Markdown, and a full ZIP backup with photos.
 
 ## Design
 
@@ -25,7 +25,6 @@ Light "steampunk-lite" style: stitched progress bars, dashed seams and a few riv
 - Supabase (Postgres, Auth, Storage)
 - Google Books API for book data
 - Claude Vision for text recognition from page photos
-- Web Push for reminders
 - Vercel for hosting
 
 ## Scope
