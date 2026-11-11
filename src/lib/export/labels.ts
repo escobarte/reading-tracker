@@ -5,6 +5,8 @@ export function shelfLabel(shelf: BookShelf, t: Dictionary): string {
   switch (shelf) {
     case "want":
       return t.library.shelfWant;
+    case "collection":
+      return t.library.shelfCollection;
     case "reading":
       return t.library.shelfReading;
     case "done":

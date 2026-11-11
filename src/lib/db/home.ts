@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { getDailyPagesGoal, getDeadlineForReading, getYearlyBooksGoal } from "@/lib/db/goals";
+import { getDailyPagesGoal, getDeadlineForReading } from "@/lib/db/goals";
 import type { DeadlineCardData } from "@/lib/db/goals";
 import { getQuoteOfDay, type NoteWithBook } from "@/lib/db/notes";
-import { localDateKey, localWeekRangeUtc, localYear } from "@/lib/time";
-import { getFinishedThisYearCount } from "./readings";
+import { localDateKey, localWeekRangeUtc } from "@/lib/time";
+import { getYearPlan, type YearPlan } from "./books";
 import { getStreakDays, getTodaySummary } from "./sessions";
 import type { BookFormat } from "./types";
 
@@ -51,7 +51,7 @@ export type HomeData = {
   streak: number;
   week: { days: HomeWeekDay[]; totalPages: number; totalMinutes: number; goalPages: number };
   queue: HomeQueueBook[];
-  year: { finishedCount: number; goal: number };
+  year: YearPlan;
   recent: HomeRecentBook[];
   /** Дедлайны всех читаемых книг (только у кого задан), чтобы блок «Дедлайн» синхронизировался со свайпом карусели. */
   deadlines: HomeDeadline[];
@@ -182,11 +182,6 @@ async function fetchWeekSection(dailyGoal: number): Promise<HomeData["week"]> {
   return { days, totalPages, totalMinutes, goalPages: dailyGoal * 7 };
 }
 
-async function fetchYearSection(yearGoal: number): Promise<HomeData["year"]> {
-  const finishedCount = await getFinishedThisYearCount();
-  return { finishedCount, goal: yearGoal };
-}
-
 async function fetchRecentSection(): Promise<HomeRecentBook[]> {
   const supabase = await createClient();
   const { data: readings, error: readingsError } = await supabase
@@ -229,9 +224,9 @@ async function fetchRecentSection(): Promise<HomeRecentBook[]> {
 }
 
 export async function getHomeData(): Promise<HomeData> {
-  const [dailyGoal, yearGoal, reading, today, streak, queue, recent, quoteOfDay] = await Promise.all([
+  const [dailyGoal, year, reading, today, streak, queue, recent, quoteOfDay] = await Promise.all([
     getDailyPagesGoal(),
-    getYearlyBooksGoal(localYear(new Date())),
+    getYearPlan(),
     fetchReadingSection(),
     getTodaySummary(),
     getStreakDays(),
@@ -240,9 +235,8 @@ export async function getHomeData(): Promise<HomeData> {
     getQuoteOfDay(),
   ]);
 
-  const [week, year, deadlines] = await Promise.all([
+  const [week, deadlines] = await Promise.all([
     fetchWeekSection(dailyGoal),
-    fetchYearSection(yearGoal),
     fetchDeadlineSection(reading),
   ]);
 

@@ -93,6 +93,7 @@ export function BookDetail({
   const shelfLabels: Record<BookShelf, string> = {
     reading: t.library.shelfReading,
     want: t.library.shelfWant,
+    collection: t.library.shelfCollection,
     done: t.library.shelfDone,
     paused: t.library.shelfPaused,
     dropped: t.library.shelfDropped,
@@ -279,7 +280,7 @@ export function BookDetail({
               }
               wrapperClassName="relative block w-full"
               triggerClassName="flex h-13 w-full items-center justify-center gap-1.5 rounded-xl border-[1.5px] border-line bg-surface px-4 font-serif text-base text-text"
-              items={(["want", "reading", "done", "paused", "dropped"] as BookShelf[]).map((value) => ({
+              items={(["want", "collection", "reading", "done", "paused", "dropped"] as BookShelf[]).map((value) => ({
                 label: shelfLabels[value],
                 active: book.shelf === value,
                 onSelect: () => handleShelfSelect(value),

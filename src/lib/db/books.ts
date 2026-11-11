@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { localYear } from "@/lib/time";
 import type { Book, BookFormat, BookShelf } from "./types";
 
 export type BookInput = {
@@ -189,29 +190,35 @@ export async function setShelf(id: string, shelf: BookShelf): Promise<void> {
   if (shelf !== "want") await renumberQueue(supabase);
 }
 
+/** Закрывает открытое прочтение без зачёта (is_dropped), если оно есть — книга переходит на полку без сохранённого прогресса чтения. */
+async function closeOpenReadingWithoutCredit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  bookId: string,
+): Promise<void> {
+  const { data: openReading, error: findError } = await supabase
+    .from("readings")
+    .select("id")
+    .eq("book_id", bookId)
+    .is("finished_at", null)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (findError) throw findError;
+
+  if (openReading) {
+    const { error: closeError } = await supabase
+      .from("readings")
+      .update({ finished_at: new Date().toISOString(), is_dropped: true })
+      .eq("id", openReading.id);
+    if (closeError) throw closeError;
+  }
+}
+
 export async function moveShelf(id: string, shelf: BookShelf): Promise<void> {
   const supabase = await createClient();
 
   if (shelf === "want") {
-    const { data: openReading, error: findError } = await supabase
-      .from("readings")
-      .select("id")
-      .eq("book_id", id)
-      .is("finished_at", null)
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (findError) throw findError;
-
-    if (openReading) {
-      // Закрыт без пометки "дочитано": is_dropped держит его вне статистики и «Прочитано»,
-      // книга просто вернулась в очередь без сохранённого прогресса чтения.
-      const { error: closeError } = await supabase
-        .from("readings")
-        .update({ finished_at: new Date().toISOString(), is_dropped: true })
-        .eq("id", openReading.id);
-      if (closeError) throw closeError;
-    }
+    await closeOpenReadingWithoutCredit(supabase, id);
 
     const queue_position = await nextQueuePosition(supabase);
     const { error } = await supabase
@@ -219,6 +226,18 @@ export async function moveShelf(id: string, shelf: BookShelf): Promise<void> {
       .update({ shelf, queue_position })
       .eq("id", id);
     if (error) throw error;
+    return;
+  }
+
+  if (shelf === "collection") {
+    await closeOpenReadingWithoutCredit(supabase, id);
+
+    const { error } = await supabase
+      .from("books")
+      .update({ shelf, queue_position: null })
+      .eq("id", id);
+    if (error) throw error;
+    await renumberQueue(supabase);
     return;
   }
 
@@ -288,4 +307,71 @@ export async function moveShelf(id: string, shelf: BookShelf): Promise<void> {
   const { error } = await supabase.from("books").update({ shelf, queue_position: null }).eq("id", id);
   if (error) throw error;
   await renumberQueue(supabase);
+}
+
+export type YearPlanBook = { id: string; title: string; totalPages: number | null; read: boolean };
+export type YearPlan = {
+  books: YearPlanBook[];
+  totalPages: number;
+  readingCount: number;
+  wantCount: number;
+  finishedCount: number;
+};
+
+/**
+ * Книги плана на год: полки "reading" + "want", плюс книги, прочтение которых закрыто (не
+ * брошено) в текущем календарном году, но которые уже сошли с этих полок. Книга, вернувшаяся
+ * на "reading"/"want" (перечитывание), считается непрочитанной в плане — живая полка важнее
+ * прежнего факта дочитывания.
+ */
+export async function getYearPlan(): Promise<YearPlan> {
+  const supabase = await createClient();
+  const currentYear = localYear(new Date());
+
+  const { data: liveBooks, error: liveError } = await supabase
+    .from("books")
+    .select("id, title, total_pages, shelf, queue_position")
+    .in("shelf", ["reading", "want"]);
+  if (liveError) throw liveError;
+
+  const { data: finishedReadings, error: readingsError } = await supabase
+    .from("readings")
+    .select("book_id, finished_at")
+    .not("finished_at", "is", null)
+    .eq("is_dropped", false);
+  if (readingsError) throw readingsError;
+
+  const finishedIds = new Set(
+    (finishedReadings ?? [])
+      .filter((reading) => reading.finished_at && localYear(reading.finished_at) === currentYear)
+      .map((reading) => reading.book_id),
+  );
+
+  const liveIds = new Set((liveBooks ?? []).map((book) => book.id));
+  const extraIds = Array.from(finishedIds).filter((id) => !liveIds.has(id));
+
+  const { data: extraBooks, error: extraError } =
+    extraIds.length > 0
+      ? await supabase.from("books").select("id, title, total_pages").in("id", extraIds)
+      : { data: [] as { id: string; title: string; total_pages: number | null }[], error: null };
+  if (extraError) throw extraError;
+
+  const readingBooks = (liveBooks ?? []).filter((book) => book.shelf === "reading");
+  const wantBooks = (liveBooks ?? [])
+    .filter((book) => book.shelf === "want")
+    .sort((a, b) => (a.queue_position ?? 0) - (b.queue_position ?? 0));
+
+  const books: YearPlanBook[] = [
+    ...readingBooks.map((book) => ({ id: book.id, title: book.title, totalPages: book.total_pages, read: false })),
+    ...wantBooks.map((book) => ({ id: book.id, title: book.title, totalPages: book.total_pages, read: false })),
+    ...(extraBooks ?? []).map((book) => ({ id: book.id, title: book.title, totalPages: book.total_pages, read: true })),
+  ];
+
+  return {
+    books,
+    totalPages: books.reduce((sum, book) => sum + (book.totalPages ?? 0), 0),
+    readingCount: readingBooks.length,
+    wantCount: wantBooks.length,
+    finishedCount: (extraBooks ?? []).length,
+  };
 }

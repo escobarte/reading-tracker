@@ -8,16 +8,16 @@ import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { StitchRing } from "@/components/ui/StitchRing";
 import { WeekBars } from "@/components/ui/WeekBars";
-import { YearSpines } from "@/components/ui/YearSpines";
 import { CoverRow } from "@/components/home/CoverRow";
 import { DeadlineSection } from "@/components/home/DeadlineSection";
 import { HeroCarousel } from "@/components/home/HeroCarousel";
+import { YearPlanCard } from "@/components/home/YearPlanCard";
 import { NoteEditorDialog, type NoteEditorTrigger } from "@/components/notes/NoteEditorDialog";
 import { toggleNoteFavoriteAction } from "@/app/notes/actions";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { pluralWord } from "@/i18n/plural";
-import { formatHoursMinutes } from "@/lib/time";
+import { formatHoursMinutes, localYear } from "@/lib/time";
 import type { HomeData } from "@/lib/db/home";
 
 type HomeViewProps = {
@@ -139,18 +139,25 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
 
         <div className="order-6 lg:order-5 lg:col-span-1">
           <Card className="h-full">
-            <p className="mb-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.home.yearTitle}</p>
-            <p className="font-mono text-[34px] leading-none text-text">
-              {data.year.finishedCount}
-              <span className="text-base text-muted">
-                {" "}
-                {formatTemplate(t.home.yearCaption, { goal: data.year.goal })}
-              </span>
-            </p>
-            <div className="mt-3">
-              <YearSpines filledCount={data.year.finishedCount} total={data.year.goal} />
-            </div>
+            <YearPlanCard
+              plan={data.year}
+              year={localYear(new Date())}
+              headerRight={
+                <Link href="/library?shelf=want" className="font-mono text-xs text-accent">
+                  {t.home.yearEditLink}
+                </Link>
+              }
+              emptyAction={
+                <Link
+                  href="/library?shelf=collection"
+                  className="mt-2 inline-block font-mono text-xs text-accent underline-offset-4 hover:underline"
+                >
+                  {t.home.yearEmptyLink}
+                </Link>
+              }
+            />
           </Card>
+          <p className="mt-2 font-serif text-sm text-muted">{t.home.yearFooterHint}</p>
         </div>
 
         <div className="order-4 lg:order-6 lg:col-span-2">

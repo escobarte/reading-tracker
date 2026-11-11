@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { setDailyPagesGoal, setYearlyBooksGoal } from "@/lib/db/goals";
-import { localYear } from "@/lib/time";
+import { setDailyPagesGoal } from "@/lib/db/goals";
 
 export async function logout() {
   const supabase = await createClient();
@@ -17,12 +16,5 @@ export async function setDailyPagesGoalAction(value: number): Promise<number> {
   revalidatePath("/settings");
   revalidatePath("/");
   revalidatePath("/session");
-  return clamped;
-}
-
-export async function setYearlyBooksGoalAction(value: number): Promise<number> {
-  const clamped = await setYearlyBooksGoal(localYear(new Date()), value);
-  revalidatePath("/settings");
-  revalidatePath("/");
   return clamped;
 }

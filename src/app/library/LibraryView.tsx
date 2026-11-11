@@ -36,13 +36,16 @@ import type { Book, BookFormat, BookShelf, Reading } from "@/lib/db/types";
 import { continueLastReadingAction } from "@/app/books/[id]/actions";
 import { moveShelfAction, reorderQueueAction } from "./actions";
 
-const SHELVES: BookShelf[] = ["reading", "want", "done", "paused", "dropped"];
+const SHELVES: BookShelf[] = ["reading", "want", "collection", "done", "paused", "dropped"];
 type SortMode = "queue" | "title" | "author";
 type DoneSortMode = "date" | "rating" | "title";
+type CollectionSortMode = "added" | "title";
 type RatingFilter = "all" | "5" | "4" | "3-" | "none";
 
 function parseShelf(value: string | null): BookShelf {
-  return value === "want" || value === "done" || value === "paused" || value === "dropped" ? value : "reading";
+  return value === "want" || value === "collection" || value === "done" || value === "paused" || value === "dropped"
+    ? value
+    : "reading";
 }
 function parseFormat(value: string | null): "all" | BookFormat {
   return value === "paper" || value === "ebook" ? value : "all";
@@ -52,6 +55,9 @@ function parseSort(value: string | null): SortMode {
 }
 function parseDoneSort(value: string | null): DoneSortMode {
   return value === "rating" || value === "title" ? value : "date";
+}
+function parseCollectionSort(value: string | null): CollectionSortMode {
+  return value === "title" ? value : "added";
 }
 function parseRatingFilter(value: string | null): RatingFilter {
   return value === "5" || value === "4" || value === "3-" || value === "none" ? value : "all";
@@ -85,6 +91,7 @@ export function LibraryView({
   const format = parseFormat(searchParams.get("format"));
   const sortMode = parseSort(searchParams.get("sort"));
   const doneSort = parseDoneSort(searchParams.get("sort"));
+  const collectionSort = parseCollectionSort(searchParams.get("sort"));
   const ratingFilter = parseRatingFilter(searchParams.get("rating"));
   const yearFilter = searchParams.get("year") ?? String(currentYear);
   const [query, setQuery] = useState("");
@@ -97,7 +104,7 @@ export function LibraryView({
     const defaults: Record<string, string> = {
       shelf: "reading",
       format: "all",
-      sort: shelf === "done" ? "date" : "queue",
+      sort: shelf === "done" ? "date" : shelf === "collection" ? "added" : "queue",
       rating: "all",
       year: String(currentYear),
     };
@@ -124,6 +131,9 @@ export function LibraryView({
   function setDoneSort(value: DoneSortMode) {
     updateParams({ sort: value });
   }
+  function setCollectionSort(value: CollectionSortMode) {
+    updateParams({ sort: value });
+  }
   function setRatingFilter(value: RatingFilter) {
     updateParams({ rating: value });
   }
@@ -138,6 +148,7 @@ export function LibraryView({
   const shelfLabels: Record<BookShelf, string> = {
     reading: t.library.shelfReading,
     want: t.library.shelfWant,
+    collection: t.library.shelfCollection,
     done: t.library.shelfDone,
     paused: t.library.shelfPaused,
     dropped: t.library.shelfDropped,
@@ -148,10 +159,29 @@ export function LibraryView({
   };
 
   const counts = useMemo(() => {
-    const result: Record<BookShelf, number> = { reading: 0, want: 0, done: 0, paused: 0, dropped: 0 };
+    const result: Record<BookShelf, number> = { reading: 0, want: 0, collection: 0, done: 0, paused: 0, dropped: 0 };
     for (const book of books) result[book.shelf] += 1;
     return result;
   }, [books]);
+
+  const collectionEntries = useMemo(() => {
+    let list = books.filter((book) => book.shelf === "collection");
+    if (format !== "all") list = list.filter((book) => book.format === format);
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (book) => book.title.toLowerCase().includes(q) || (book.author ?? "").toLowerCase().includes(q),
+      );
+    }
+
+    const sorted = [...list];
+    if (collectionSort === "title") {
+      sorted.sort((a, b) => a.title.localeCompare(b.title, locale));
+    } else {
+      sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
+    return sorted;
+  }, [books, format, query, collectionSort, locale]);
 
   const effectiveSort: SortMode = shelf === "want" ? sortMode : sortMode === "queue" ? "title" : sortMode;
   const isQueueView = shelf === "want" && effectiveSort === "queue" && format === "all" && query.trim() === "";
@@ -328,6 +358,13 @@ export function LibraryView({
     });
   }
 
+  function handleReadFromCollection(id: string) {
+    setBooks((prev) => prev.map((book) => (book.id === id ? { ...book, shelf: "want" } : book)));
+    startTransition(() => {
+      moveShelfAction(id, "want").then(() => router.refresh());
+    });
+  }
+
   return (
     <AppShell today={today}>
       <header className="flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between">
@@ -443,7 +480,31 @@ export function LibraryView({
             {doneAvgRating != null ? ` · ${t.library.averageLabel} ${doneAvgRating.toFixed(1)}` : ""}
           </span>
         </div>
-      ) : shelf === "paused" || shelf === "dropped" ? null : (
+      ) : shelf === "paused" || shelf === "dropped" ? null : shelf === "collection" ? (
+        <div className="flex flex-col gap-3 pb-5">
+          <p className="font-serif text-sm text-muted">{t.library.collectionHint}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Dropdown
+              trigger={format === "all" ? t.library.filterFormatAll : formatLabels[format]}
+              items={[
+                { label: t.library.filterFormatAll, active: format === "all", onSelect: () => setFormat("all") },
+                { label: t.library.filterFormatPaper, active: format === "paper", onSelect: () => setFormat("paper") },
+                { label: t.library.filterFormatEbook, active: format === "ebook", onSelect: () => setFormat("ebook") },
+              ]}
+            />
+            <Dropdown
+              trigger={collectionSort === "added" ? t.library.sortAdded : t.library.sortTitle}
+              items={[
+                { label: t.library.sortAdded, active: collectionSort === "added", onSelect: () => setCollectionSort("added") },
+                { label: t.library.sortTitle, active: collectionSort === "title", onSelect: () => setCollectionSort("title") },
+              ]}
+            />
+            <span className="ml-auto font-mono text-xs text-muted">
+              {formatCount(collectionEntries.length, "book", locale)}
+            </span>
+          </div>
+        </div>
+      ) : (
         <div className="flex flex-wrap items-center gap-2 pb-5">
           <Dropdown
             trigger={format === "all" ? t.library.filterFormatAll : formatLabels[format]}
@@ -534,6 +595,22 @@ export function LibraryView({
             ))}
           </div>
         )
+      ) : shelf === "collection" ? (
+        collectionEntries.length === 0 ? (
+          <EmptyState title={t.library.collectionEmpty} />
+        ) : (
+          <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:gap-3">
+            {collectionEntries.map((book) => (
+              <CollectionBookCard
+                key={book.id}
+                book={book}
+                formatLabel={formatLabels[book.format]}
+                readLabel={t.library.collectionReadButton}
+                onRead={() => handleReadFromCollection(book.id)}
+              />
+            ))}
+          </div>
+        )
       ) : visibleBooks.length === 0 ? (
         <div className="flex min-h-[40dvh] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-stitch bg-surface p-8 text-center">
           <p className="font-serif text-lg font-bold text-text">{t.library.empty}</p>
@@ -605,6 +682,42 @@ function EmptyState({
           {ctaLabel}
         </Button>
       )}
+    </div>
+  );
+}
+
+function CollectionBookCard({
+  book,
+  formatLabel,
+  readLabel,
+  onRead,
+}: {
+  book: Book;
+  formatLabel: string;
+  readLabel: string;
+  onRead: () => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="flex items-center gap-3 rounded-[14px] border border-line bg-surface p-3">
+      <Link href={`/books/${book.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+        <Cover title={book.title} coverUrl={book.cover_url ?? undefined} size="row" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-serif text-[17px] font-bold leading-[1.15] text-text">{book.title}</p>
+          {book.author && <p className="truncate font-serif text-[13px] text-muted">{book.author}</p>}
+          <p className="truncate font-mono text-xs text-muted">
+            {formatLabel}
+            {book.total_pages ? ` · ${book.total_pages} ${t.book.pagesUnit}` : ""}
+          </p>
+        </div>
+      </Link>
+      <button
+        type="button"
+        onClick={onRead}
+        className="h-11 shrink-0 rounded-lg border-[1.5px] border-dashed border-accent px-4 font-serif text-sm font-bold text-accent"
+      >
+        {readLabel}
+      </button>
     </div>
   );
 }
@@ -716,6 +829,7 @@ function SelectedPanel({
   const shelfLabels: Record<BookShelf, string> = {
     reading: t.library.shelfReading,
     want: t.library.shelfWant,
+    collection: t.library.shelfCollection,
     done: t.library.shelfDone,
     paused: t.library.shelfPaused,
     dropped: t.library.shelfDropped,

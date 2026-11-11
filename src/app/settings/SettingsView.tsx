@@ -12,16 +12,13 @@ import { DataSection } from "@/components/settings/DataSection";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { useTheme } from "@/lib/theme";
-import { logout, setDailyPagesGoalAction, setYearlyBooksGoalAction } from "./actions";
+import { logout, setDailyPagesGoalAction } from "./actions";
 
 const DAILY_RANGE = { min: 1, max: 500 };
-const YEAR_RANGE = { min: 1, max: 200 };
 const SAVE_DELAY_MS = 600;
 
 type SettingsViewProps = {
   dailyGoal: number;
-  yearGoal: number;
-  finishedThisYear: number;
   email: string | null;
   provider: "google" | "email" | null;
   today: { pages: number; goal: number };
@@ -52,12 +49,11 @@ function useDebouncedGoal(
   return [value, change];
 }
 
-export function SettingsView({ dailyGoal, yearGoal, finishedThisYear, email, provider, today }: SettingsViewProps) {
+export function SettingsView({ dailyGoal, email, provider, today }: SettingsViewProps) {
   const { t, locale, setLocale } = useLocale();
   const { theme, setTheme } = useTheme();
 
   const [dailyPages, setDailyPages] = useDebouncedGoal(dailyGoal, DAILY_RANGE, setDailyPagesGoalAction);
-  const [yearBooks, setYearBooks] = useDebouncedGoal(yearGoal, YEAR_RANGE, setYearlyBooksGoalAction);
 
   return (
     <AppShell variant="narrow" today={today}>
@@ -121,19 +117,6 @@ export function SettingsView({ dailyGoal, yearGoal, finishedThisYear, email, pro
               max={DAILY_RANGE.max}
               decrementLabel={t.settings.dailyPagesDecrement}
               incrementLabel={t.settings.dailyPagesIncrement}
-            />
-
-            <div className="my-3 border-t border-dashed border-line" />
-
-            <GoalRow
-              label={t.settings.yearBooksLabel}
-              caption={formatTemplate(t.settings.yearBooksCaption, { count: finishedThisYear })}
-              value={yearBooks}
-              onChange={setYearBooks}
-              min={YEAR_RANGE.min}
-              max={YEAR_RANGE.max}
-              decrementLabel={t.settings.yearBooksDecrement}
-              incrementLabel={t.settings.yearBooksIncrement}
             />
 
             <p className="mt-3 font-serif text-sm text-muted">{t.settings.goalsHint}</p>

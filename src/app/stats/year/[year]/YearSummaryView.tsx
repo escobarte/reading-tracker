@@ -8,6 +8,7 @@ import { StitchBar } from "@/components/ui/StitchBar";
 import { YearSpines } from "@/components/ui/YearSpines";
 import { StatTile } from "@/components/ui/StatTile";
 import { PeriodBars, type PeriodBar } from "@/components/stats/PeriodBars";
+import { YearPlanCard } from "@/components/home/YearPlanCard";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { pluralWord } from "@/i18n/plural";
@@ -27,7 +28,8 @@ export function YearSummaryView({ data, today }: YearSummaryViewProps) {
     hasData,
     minYear,
     maxYear,
-    goal,
+    finishedCount,
+    yearPlan,
     tiles,
     avgRating,
     longestBook,
@@ -90,29 +92,38 @@ export function YearSummaryView({ data, today }: YearSummaryViewProps) {
       ) : (
         <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3">
           <div className="rounded-xl border-[1.5px] border-dashed border-accent bg-surface p-4 lg:col-span-2 lg:row-start-1 lg:p-5">
-            <div className="flex items-baseline justify-between">
-              <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.yearSummary.booksTitle}</p>
-              {isCurrentYear && <p className="font-mono text-xs text-muted">{t.yearSummary.yearInProgress}</p>}
-            </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="font-mono text-[56px] leading-none text-text">{goal.finished}</span>
-              <span className="font-mono text-sm text-muted">
-                {formatTemplate(t.yearSummary.booksCount, { goal: goal.goal, unit: pluralWord(goal.goal, "book", locale) })}
-              </span>
-            </div>
-            <div className="mt-3">
-              <YearSpines filledCount={goal.finished} total={goal.goal} size="wide" />
-            </div>
-            <p className="mt-3 font-mono text-xs text-muted">
-              {isCurrentYear && goal.daysLeftInYear !== null
-                ? formatTemplate(t.yearSummary.untilGoal, {
-                    count: Math.max(0, goal.goal - goal.finished),
-                    unit: pluralWord(Math.max(0, goal.goal - goal.finished), "book", locale),
-                    days: goal.daysLeftInYear,
-                    dayUnit: pluralWord(goal.daysLeftInYear, "day", locale),
-                  })
-                : formatTemplate(t.yearSummary.goalOnly, { goal: goal.goal })}
-            </p>
+            {isCurrentYear && yearPlan ? (
+              <>
+                <YearPlanCard
+                  plan={yearPlan}
+                  year={year}
+                  headerRight={
+                    <Link href="/library?shelf=want" className="font-mono text-xs text-accent">
+                      {t.home.yearEditLink}
+                    </Link>
+                  }
+                  emptyAction={
+                    <Link
+                      href="/library?shelf=collection"
+                      className="mt-2 inline-block font-mono text-xs text-accent underline-offset-4 hover:underline"
+                    >
+                      {t.home.yearEmptyLink}
+                    </Link>
+                  }
+                />
+                <p className="mt-3 font-serif text-sm text-muted">{t.home.yearFooterHint}</p>
+              </>
+            ) : (
+              <>
+                <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">{t.yearSummary.booksTitle}</p>
+                <div className="mt-2 flex items-baseline gap-1.5">
+                  <span className="font-mono text-[56px] leading-none text-text">{finishedCount}</span>
+                </div>
+                <div className="mt-3">
+                  <YearSpines filledCount={finishedCount} total={Math.max(finishedCount, 1)} size="wide" />
+                </div>
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:col-start-3 lg:row-start-1 lg:gap-3">

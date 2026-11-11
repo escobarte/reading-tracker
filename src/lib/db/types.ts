@@ -1,5 +1,5 @@
 export type BookFormat = "paper" | "ebook";
-export type BookShelf = "want" | "reading" | "done" | "paused" | "dropped";
+export type BookShelf = "want" | "reading" | "done" | "paused" | "dropped" | "collection";
 
 export type Book = {
   id: string;

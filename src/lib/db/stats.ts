@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { addDays, daysBetween } from "@/lib/goals";
-import { getDailyPagesGoal, getYearlyBooksGoal } from "@/lib/db/goals";
-import { getFinishedThisYearCount } from "@/lib/db/readings";
+import { getDailyPagesGoal } from "@/lib/db/goals";
+import { getYearPlan, type YearPlan } from "@/lib/db/books";
 import { getStreakDays } from "@/lib/db/sessions";
 import {
   bucketTimeOfDay,
@@ -64,7 +64,7 @@ export type StatsData = {
   barsGoal: number | null;
   timeOfDay: Record<TimeOfDayBucket, number>;
   hasData: boolean;
-  yearGoal: { finished: number; goal: number; daysLeftInYear: number };
+  yearPlan: YearPlan;
 };
 
 /** Full `/stats` data for one period view: tiles, calendar, bars, time-of-day — one Promise.all, columns kept minimal. */
@@ -86,10 +86,9 @@ export async function getStatsData(period: Period, anchor: string): Promise<Stat
     readingsQuery = readingsQuery.gte("finished_at", bounds.gte).lt("finished_at", bounds.lt);
   }
 
-  const [dailyGoal, yearGoalTarget, finishedThisYear, streak, sessionsRes, readingsRes] = await Promise.all([
+  const [dailyGoal, yearPlan, streak, sessionsRes, readingsRes] = await Promise.all([
     getDailyPagesGoal(),
-    getYearlyBooksGoal(currentYear),
-    getFinishedThisYearCount(),
+    getYearPlan(),
     getStreakDays(),
     sessionsQuery,
     readingsQuery,
@@ -246,8 +245,6 @@ export async function getStatsData(period: Period, anchor: string): Promise<Stat
     }
   }
 
-  const daysLeftInYear = daysBetween(todayKey, `${currentYear}-12-31`);
-
   return {
     period,
     anchor,
@@ -258,7 +255,7 @@ export async function getStatsData(period: Period, anchor: string): Promise<Stat
     barsGoal,
     timeOfDay: bucketTimeOfDay(timeOfDayRows),
     hasData: sessionCount > 0,
-    yearGoal: { finished: finishedThisYear, goal: yearGoalTarget, daysLeftInYear },
+    yearPlan,
   };
 }
 
@@ -285,7 +282,9 @@ export type YearSummaryData = {
   hasData: boolean;
   minYear: number;
   maxYear: number;
-  goal: { finished: number; goal: number; daysLeftInYear: number | null };
+  finishedCount: number;
+  /** План года текущего календарного года — только для `isCurrentYear`, для прошлых лет план не восстановить. */
+  yearPlan: YearPlan | null;
   tiles: { pages: number; hours: number; daysWithReading: number; elapsedDaysInYear: number; sessions: number };
   /** Средняя оценка по прочтениям года с оценкой (брошенные уже не входят в closedReadings); `null`, если нет ни одной оценки. */
   avgRating: number | null;
@@ -318,8 +317,8 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
   const effectiveEndKey = isCurrentYear ? todayKey : yearEndKey;
   const bounds = rangeBoundsUtc(yearStartKey, yearEndKey);
 
-  const [yearGoalTarget, sessionsRes, readingsRes, minYearRes] = await Promise.all([
-    getYearlyBooksGoal(year),
+  const [yearPlan, sessionsRes, readingsRes, minYearRes] = await Promise.all([
+    isCurrentYear ? getYearPlan() : Promise.resolve(null),
     supabase.from("sessions").select("started_at, pages_read, seconds").gte("started_at", bounds.gte).lt("started_at", bounds.lt),
     supabase
       .from("readings")
@@ -430,11 +429,8 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
     hasData: sessionCount > 0 || closedReadings.length > 0,
     minYear,
     maxYear: currentYear,
-    goal: {
-      finished: closedReadings.length,
-      goal: yearGoalTarget,
-      daysLeftInYear: isCurrentYear ? daysBetween(todayKey, yearEndKey) : null,
-    },
+    finishedCount: closedReadings.length,
+    yearPlan,
     tiles: {
       pages: totalPages,
       hours: Math.round(totalSeconds / 3600),

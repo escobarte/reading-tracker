@@ -5,7 +5,6 @@
  */
 
 export const DEFAULT_DAILY_PAGES_GOAL = 30;
-export const DEFAULT_YEAR_BOOKS_GOAL = 24;
 
 /** 1 = понедельник … 7 = воскресенье (неделя с понедельника). */
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;

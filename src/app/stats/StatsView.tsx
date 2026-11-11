@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StatTile } from "@/components/ui/StatTile";
 import { StitchBar } from "@/components/ui/StitchBar";
-import { YearSpines } from "@/components/ui/YearSpines";
 import { Heatmap } from "@/components/stats/Heatmap";
 import { PeriodBars, type PeriodBar } from "@/components/stats/PeriodBars";
+import { YearPlanCard } from "@/components/home/YearPlanCard";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { formatCount, pluralWord } from "@/i18n/plural";
@@ -30,7 +30,7 @@ export function StatsView({ data, today }: StatsViewProps) {
   const { t, locale } = useLocale();
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const { period, anchor, range, tiles, heatmap, bars, barsGoal, timeOfDay, hasData, yearGoal } = data;
+  const { period, anchor, range, tiles, heatmap, bars, barsGoal, timeOfDay, hasData, yearPlan } = data;
   const todayKey = localDateKey(new Date());
   const currentYear = Number(todayKey.slice(0, 4));
 
@@ -183,23 +183,7 @@ export function StatsView({ data, today }: StatsViewProps) {
             heatmap ? "lg:col-start-3" : "lg:col-span-2"
           }`}
         >
-          <div className="flex items-baseline justify-between">
-            <p className="font-mono text-xs uppercase tracking-[0.1em] text-accent">
-              {formatTemplate(t.stats.yearGoalTitle, { year: currentYear })}
-            </p>
-            <p className="font-mono text-xs text-muted">
-              {formatTemplate(t.stats.yearGoalDaysLeft, { days: yearGoal.daysLeftInYear, unit: pluralWord(yearGoal.daysLeftInYear, "day", locale) })}
-            </p>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="font-mono text-[40px] leading-none text-text">{yearGoal.finished}</span>
-            <span className="font-mono text-sm text-muted">
-              {formatTemplate(t.stats.yearGoalCount, { goal: yearGoal.goal, unit: pluralWord(yearGoal.goal, "book", locale) })}
-            </span>
-          </div>
-          <div className="mt-3">
-            <YearSpines filledCount={yearGoal.finished} total={yearGoal.goal} />
-          </div>
+          <YearPlanCard plan={yearPlan} year={currentYear} variant="compact" />
           {period === "year" ? (
             <Link href={`/stats/year/${anchor}`} className="mt-3 block">
               <Button variant="secondary" className="h-12 w-full">

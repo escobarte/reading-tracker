@@ -1,10 +1,9 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { DEFAULT_DAILY_PAGES_GOAL, DEFAULT_YEAR_BOOKS_GOAL, computeDeadlineNorm, type DeadlineComputation } from "@/lib/goals";
+import { DEFAULT_DAILY_PAGES_GOAL, computeDeadlineNorm, type DeadlineComputation } from "@/lib/goals";
 import { localDateKey, localDayRangeUtc } from "@/lib/time";
 
 const DAILY_PAGES_RANGE = { min: 1, max: 500 };
-const YEAR_BOOKS_RANGE = { min: 1, max: 200 };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(value)));
@@ -37,39 +36,6 @@ export async function setDailyPagesGoal(value: number): Promise<number> {
     if (error) throw error;
   } else {
     const { error } = await supabase.from("goals").insert({ kind: "daily", target_value: clamped });
-    if (error) throw error;
-  }
-  return clamped;
-}
-
-export async function getYearlyBooksGoal(year: number): Promise<number> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("goals")
-    .select("target_value")
-    .eq("kind", "yearly")
-    .eq("year", year)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.target_value ?? DEFAULT_YEAR_BOOKS_GOAL;
-}
-
-export async function setYearlyBooksGoal(year: number, value: number): Promise<number> {
-  const clamped = clamp(value, YEAR_BOOKS_RANGE.min, YEAR_BOOKS_RANGE.max);
-  const supabase = await createClient();
-  const { data: existing, error: selectError } = await supabase
-    .from("goals")
-    .select("id")
-    .eq("kind", "yearly")
-    .eq("year", year)
-    .maybeSingle();
-  if (selectError) throw selectError;
-
-  if (existing) {
-    const { error } = await supabase.from("goals").update({ target_value: clamped }).eq("id", existing.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from("goals").insert({ kind: "yearly", year, target_value: clamped });
     if (error) throw error;
   }
   return clamped;

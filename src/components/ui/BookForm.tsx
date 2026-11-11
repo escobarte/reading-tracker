@@ -25,7 +25,7 @@ export const emptyBookFormValues: BookFormValues = {
   author: "",
   total_pages: null,
   format: "paper",
-  shelf: "want",
+  shelf: "collection",
   genre: "",
   series: "",
   series_number: null,
@@ -135,9 +135,10 @@ export function BookForm({
       {showShelf && (
         <SegmentedControl
           aria-label={t.library.title}
-          value={shelf === "reading" ? "reading" : "want"}
+          value={shelf === "reading" ? "reading" : shelf === "want" ? "want" : "collection"}
           onChange={(value) => setShelf(value as BookShelf)}
           options={[
+            { value: "collection", label: t.library.shelfCollection },
             { value: "want", label: t.library.shelfWant },
             { value: "reading", label: t.library.shelfReading },
           ]}

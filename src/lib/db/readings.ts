@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { localYear } from "@/lib/time";
 import type { PauseReasonCode } from "@/lib/pause-reasons";
 import { setShelf } from "./books";
 import type { Reading } from "./types";
@@ -78,22 +77,6 @@ export async function saveReadingWrapup(readingId: string, input: ReadingWrapupI
     .single();
   if (error) throw error;
   return data;
-}
-
-/** Число прочтений, закрытых в текущем календарном году (Europe/Bucharest) — для годовой цели. Брошенные не считаются. */
-export async function getFinishedThisYearCount(): Promise<number> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("readings")
-    .select("finished_at")
-    .not("finished_at", "is", null)
-    .eq("is_dropped", false);
-  if (error) throw error;
-
-  const currentYear = localYear(new Date());
-  return (data ?? []).filter(
-    (reading) => reading.finished_at && localYear(reading.finished_at) === currentYear,
-  ).length;
 }
 
 export async function getReading(id: string): Promise<Reading | null> {
