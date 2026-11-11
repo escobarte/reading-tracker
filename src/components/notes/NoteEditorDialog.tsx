@@ -10,6 +10,7 @@ import { TagInput } from "./TagInput";
 import { PhotoThumbnail } from "./PhotoThumbnail";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { bitmapFromFile, compressImage } from "@/lib/image";
+import { NO_BOOK_ID } from "@/lib/notes";
 import {
   createNoteAction,
   deleteNoteAction,
@@ -71,7 +72,7 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
       setLoading(true);
       if (trigger.mode === "edit") {
         setType(trigger.note.type === "photo" ? "quote" : trigger.note.type);
-        setBookId(trigger.note.book_id);
+        setBookId(trigger.note.book_id ?? NO_BOOK_ID);
         setBody(trigger.note.body ?? "");
         setMeaning(trigger.note.meaning ?? "");
         setPage(trigger.note.page);
@@ -80,7 +81,7 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
         setPhotoUrl(trigger.photoUrl ?? null);
       } else {
         setType("quote");
-        setBookId(trigger.defaultBookId ?? "");
+        setBookId(trigger.defaultBookId ?? NO_BOOK_ID);
         setBody("");
         setMeaning("");
         setPage(null);
@@ -100,10 +101,12 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
       setTagSuggestions(data.tagSuggestions);
       setLoading(false);
       if (trigger?.mode === "add") {
-        const resolvedId = bookId || data.defaultBookId || data.books[0]?.id || "";
-        if (resolvedId !== bookId) setBookId(resolvedId);
-        const book = data.books.find((b) => b.id === resolvedId);
-        setPage(book?.currentPage ?? 0);
+        if (bookId === NO_BOOK_ID) {
+          setPage(null);
+        } else {
+          const book = data.books.find((b) => b.id === bookId);
+          setPage(book?.currentPage ?? 0);
+        }
       }
     });
     return () => {
@@ -116,6 +119,10 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
 
   function handleBookChange(nextId: string) {
     setBookId(nextId);
+    if (nextId === NO_BOOK_ID) {
+      setPage(null);
+      return;
+    }
     setPage((prev) => {
       if (prev === null) return null;
       const book = books.find((b) => b.id === nextId);
@@ -130,19 +137,16 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
 
   function handleSave() {
     if (pending || !trigger) return;
-    if (!bookId) {
-      setError(t.noteEditor.errorBook);
-      return;
-    }
     // Пустой текст у заметки с фото — это заметка типа «фото», а не пустая цитата/мысль/слово
     // (иначе сохранение без правок молча переключит тип с «фото» на выбранный в Segmented).
     const effectiveType: NoteType = !body.trim() && hasPhoto ? "photo" : type;
+    const noBook = bookId === NO_BOOK_ID;
     const input = {
-      book_id: bookId,
+      book_id: noBook ? null : bookId,
       type: effectiveType,
       body,
       meaning: effectiveType === "word" ? meaning.trim() || null : null,
-      page,
+      page: noBook ? null : page,
       tags,
     };
     startTransition(async () => {
@@ -219,7 +223,6 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
 
   const readingBooks = books.filter((b) => b.shelf === "reading");
   const doneBooks = books.filter((b) => b.shelf === "done");
-  const noBooks = !loading && books.length === 0;
 
   return (
     <Modal
@@ -289,41 +292,38 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
           </div>
         )}
 
-        {noBooks ? (
-          <p className="font-serif text-sm text-muted">{t.noteEditor.noBooks}</p>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="note-book-select" className="font-mono text-xs uppercase tracking-[0.1em] text-muted">
-              {t.noteEditor.fieldBook}
-            </label>
-            <select
-              id="note-book-select"
-              value={bookId}
-              onChange={(event) => handleBookChange(event.target.value)}
-              disabled={loading}
-              className="h-13 rounded-md border-[1.5px] border-line bg-input px-4 font-serif text-base text-text outline-none focus:border-2 focus:border-accent"
-            >
-              {readingBooks.length > 0 && (
-                <optgroup label={t.noteEditor.bookGroupReading}>
-                  {readingBooks.map((book) => (
-                    <option key={book.id} value={book.id}>
-                      {book.author ? `${book.title} — ${book.author}` : book.title}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {doneBooks.length > 0 && (
-                <optgroup label={t.noteEditor.bookGroupDone}>
-                  {doneBooks.map((book) => (
-                    <option key={book.id} value={book.id}>
-                      {book.author ? `${book.title} — ${book.author}` : book.title}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-        )}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="note-book-select" className="font-mono text-xs uppercase tracking-[0.1em] text-muted">
+            {t.noteEditor.fieldBook}
+          </label>
+          <select
+            id="note-book-select"
+            value={bookId}
+            onChange={(event) => handleBookChange(event.target.value)}
+            disabled={loading}
+            className="h-13 rounded-md border-[1.5px] border-line bg-input px-4 font-serif text-base text-text outline-none focus:border-2 focus:border-accent"
+          >
+            <option value={NO_BOOK_ID}>{t.notes.noBookLabel}</option>
+            {readingBooks.length > 0 && (
+              <optgroup label={t.noteEditor.bookGroupReading}>
+                {readingBooks.map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.author ? `${book.title} — ${book.author}` : book.title}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {doneBooks.length > 0 && (
+              <optgroup label={t.noteEditor.bookGroupDone}>
+                {doneBooks.map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.author ? `${book.title} — ${book.author}` : book.title}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="note-body" className="font-mono text-xs uppercase tracking-[0.1em] text-muted">
@@ -354,28 +354,30 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.noteEditor.fieldPage}</p>
-            <button
-              type="button"
-              onClick={() => (page === null ? handleRestorePage() : setPage(null))}
-              className="min-h-11 px-2 font-serif text-sm text-accent"
-            >
-              {page === null ? t.noteEditor.pageAdd : t.noteEditor.pageRemove}
-            </button>
+        {bookId !== NO_BOOK_ID && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted">{t.noteEditor.fieldPage}</p>
+              <button
+                type="button"
+                onClick={() => (page === null ? handleRestorePage() : setPage(null))}
+                className="min-h-11 px-2 font-serif text-sm text-accent"
+              >
+                {page === null ? t.noteEditor.pageAdd : t.noteEditor.pageRemove}
+              </button>
+            </div>
+            {page !== null && (
+              <Stepper
+                value={page}
+                onChange={setPage}
+                decrementLabel={t.session.pageDecrementLabel}
+                incrementLabel={t.session.pageIncrementLabel}
+                inputLabel={t.noteEditor.fieldPage}
+                min={0}
+              />
+            )}
           </div>
-          {page !== null && (
-            <Stepper
-              value={page}
-              onChange={setPage}
-              decrementLabel={t.session.pageDecrementLabel}
-              incrementLabel={t.session.pageIncrementLabel}
-              inputLabel={t.noteEditor.fieldPage}
-              min={0}
-            />
-          )}
-        </div>
+        )}
 
         <TagInput
           tags={tags}
@@ -388,7 +390,7 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
 
         {error && <p className="font-serif text-sm text-deadline">{error}</p>}
 
-        <Button onClick={handleSave} disabled={pending || noBooks} className="h-14 w-full">
+        <Button onClick={handleSave} disabled={pending} className="h-14 w-full">
           {pending ? t.noteEditor.savePending : t.noteEditor.save}
         </Button>
         <Button variant="text" onClick={onClose} className="h-11 w-full justify-center">

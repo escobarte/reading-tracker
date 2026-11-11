@@ -62,7 +62,7 @@ export type Note = {
   id: string;
   user_id: string;
   created_at: string;
-  book_id: string;
+  book_id: string | null;
   type: NoteType;
   body: string | null;
   meaning: string | null;

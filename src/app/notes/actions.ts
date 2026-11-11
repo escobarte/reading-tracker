@@ -9,7 +9,6 @@ import {
   createPhotoNote,
   deleteNote,
   getBookPickerOptions,
-  getLatestReadingBookId,
   getNotePhotoUrl,
   getTagSuggestions,
   removeNotePhoto,
@@ -27,23 +26,18 @@ const MAX_NOTE_LENGTH = 5000;
 
 export type SaveNoteResult = { ok: true; note: Note } | { ok: false; error: "empty" | "too_long" };
 
-function revalidateNotePaths(bookId: string) {
+function revalidateNotePaths(bookId: string | null) {
   revalidatePath("/notes");
   revalidatePath("/");
-  revalidatePath(`/books/${bookId}`);
+  if (bookId) revalidatePath(`/books/${bookId}`);
 }
 
 export async function getNoteEditorDataAction(): Promise<{
   books: NoteBookOption[];
-  defaultBookId: string | null;
   tagSuggestions: string[];
 }> {
-  const [books, defaultBookId, tagSuggestions] = await Promise.all([
-    getBookPickerOptions(),
-    getLatestReadingBookId(),
-    getTagSuggestions(),
-  ]);
-  return { books, defaultBookId, tagSuggestions };
+  const [books, tagSuggestions] = await Promise.all([getBookPickerOptions(), getTagSuggestions()]);
+  return { books, tagSuggestions };
 }
 
 /** `hasPhoto`: у заметки уже есть фото — тогда пустой текст допустим (заметка остаётся при своём фото). */
@@ -75,12 +69,12 @@ export async function updateNoteAction(id: string, input: NoteInput, hasPhoto = 
   return { ok: true, note };
 }
 
-export async function deleteNoteAction(id: string, bookId: string): Promise<void> {
+export async function deleteNoteAction(id: string, bookId: string | null): Promise<void> {
   await deleteNote(id);
   revalidateNotePaths(bookId);
 }
 
-export async function toggleNoteFavoriteAction(id: string, favorite: boolean, bookId: string): Promise<void> {
+export async function toggleNoteFavoriteAction(id: string, favorite: boolean, bookId: string | null): Promise<void> {
   await setNoteFavorite(id, favorite);
   revalidateNotePaths(bookId);
 }
@@ -144,7 +138,7 @@ export type PhotoActionResult = { ok: true } | { ok: false };
 /** «Заменить» фото в правке заметки. */
 export async function replaceNotePhotoAction(
   noteId: string,
-  bookId: string,
+  bookId: string | null,
   photoBase64: string,
 ): Promise<PhotoActionResult> {
   const user = await getCurrentUser();
@@ -159,7 +153,7 @@ export async function replaceNotePhotoAction(
 }
 
 /** «Удалить фото» в правке заметки. */
-export async function removeNotePhotoAction(noteId: string, bookId: string): Promise<PhotoActionResult> {
+export async function removeNotePhotoAction(noteId: string, bookId: string | null): Promise<PhotoActionResult> {
   try {
     await removeNotePhoto(noteId);
     revalidateNotePaths(bookId);

@@ -35,9 +35,11 @@ export function HomeView({ data, greeting, dateLabel }: HomeViewProps) {
 
   const quote = data.quoteOfDay;
   const quoteCaption = quote
-    ? quote.page != null
-      ? formatTemplate(t.home.quoteCaption, { book: quote.bookTitle, page: quote.page })
-      : formatTemplate(t.home.quoteCaptionNoPage, { book: quote.bookTitle })
+    ? quote.book_id === null
+      ? t.notes.noBookLabel
+      : quote.page != null
+        ? formatTemplate(t.home.quoteCaption, { book: quote.bookTitle, page: quote.page })
+        : formatTemplate(t.home.quoteCaptionNoPage, { book: quote.bookTitle })
     : "";
   const quoteTrigger: NoteEditorTrigger = quote
     ? { mode: "edit", note: quote }

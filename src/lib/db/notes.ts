@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { groupGenres } from "@/lib/stats";
-import { pickQuoteOfDay } from "@/lib/notes";
+import { NO_BOOK_ID, pickQuoteOfDay } from "@/lib/notes";
 import { localDateKey } from "@/lib/time";
 import { deleteNotePhoto, getSignedPhotoUrls, notePhotoPath, uploadNotePhoto } from "./photos";
 import type { BookShelf, Note, NoteType } from "./types";
@@ -25,7 +25,7 @@ export type NoteFilters = {
 };
 
 export type NoteInput = {
-  book_id: string;
+  book_id: string | null;
   type: NoteType;
   body: string;
   meaning: string | null;
@@ -36,17 +36,22 @@ export type NoteInput = {
 async function attachBooks(notes: Note[]): Promise<NoteWithBook[]> {
   if (notes.length === 0) return [];
   const supabase = await createClient();
-  const bookIds = [...new Set(notes.map((n) => n.book_id))];
-  const [{ data: books, error }, withPhotos] = await Promise.all([
-    supabase.from("books").select("id, title, author").in("id", bookIds),
-    attachPhotoUrls(notes),
-  ]);
-  if (error) throw error;
-  const byId = new Map((books ?? []).map((b) => [b.id, b]));
+  const bookIds = [...new Set(notes.map((n) => n.book_id).filter((id): id is string => id !== null))];
+
+  const withPhotosPromise = attachPhotoUrls(notes);
+  let books: { id: string; title: string; author: string | null }[] = [];
+  if (bookIds.length > 0) {
+    const { data, error } = await supabase.from("books").select("id, title, author").in("id", bookIds);
+    if (error) throw error;
+    books = data ?? [];
+  }
+  const withPhotos = await withPhotosPromise;
+
+  const byId = new Map(books.map((b) => [b.id, b]));
   return withPhotos.map((note) => ({
     ...note,
-    bookTitle: byId.get(note.book_id)?.title ?? "",
-    bookAuthor: byId.get(note.book_id)?.author ?? null,
+    bookTitle: (note.book_id ? byId.get(note.book_id)?.title : undefined) ?? "",
+    bookAuthor: (note.book_id ? byId.get(note.book_id)?.author : undefined) ?? null,
   }));
 }
 
@@ -56,7 +61,8 @@ async function fetchFilteredNotes(filters: NoteFilters): Promise<NoteWithBook[]>
   let builder = supabase.from("notes").select("*").order("created_at", { ascending: false });
   if (filters.type) builder = builder.eq("type", filters.type);
   if (filters.favorite) builder = builder.eq("is_favorite", true);
-  if (filters.bookId) builder = builder.eq("book_id", filters.bookId);
+  if (filters.bookId === NO_BOOK_ID) builder = builder.is("book_id", null);
+  else if (filters.bookId) builder = builder.eq("book_id", filters.bookId);
   const { data, error } = await builder;
   if (error) throw error;
 

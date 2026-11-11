@@ -12,7 +12,7 @@ import { toggleNoteFavoriteAction } from "@/app/notes/actions";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { addDays } from "@/lib/goals";
-import { noteDayGroup } from "@/lib/notes";
+import { NO_BOOK_ID, noteDayGroup } from "@/lib/notes";
 import { formatHistoryDate, localDateKey } from "@/lib/time";
 import type { NoteType } from "@/lib/db/types";
 import type { NoteWithBook } from "@/lib/db/notes";
@@ -85,11 +85,11 @@ export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, tod
   }
 
   function openAdd() {
-    setTrigger({ mode: "add", defaultBookId: filters.bookId });
+    setTrigger({ mode: "add", defaultBookId: filters.bookId === NO_BOOK_ID ? null : filters.bookId });
     setDialogOpen(true);
   }
   function openAddPhoto() {
-    const qs = filters.bookId ? `?book=${filters.bookId}` : "";
+    const qs = filters.bookId && filters.bookId !== NO_BOOK_ID ? `?book=${filters.bookId}` : "";
     router.push(`/session/photo${qs}`);
   }
   function openEdit(note: NoteWithBook) {
@@ -190,6 +190,12 @@ export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, tod
           <Icon name="favorite" width={14} height={14} aria-hidden="true" style={filters.favorite ? { fill: "currentColor" } : undefined} />
           {t.notes.filterFavorite}
         </Pill>
+        <Pill
+          active={filters.bookId === NO_BOOK_ID}
+          onClick={() => setFilter("book", filters.bookId === NO_BOOK_ID ? null : NO_BOOK_ID)}
+        >
+          {t.notes.noBookLabel}
+        </Pill>
       </div>
 
       {filterBookTitle && (
@@ -213,11 +219,14 @@ export function NotesView({ notes, hasMore, limit, filters, filterBookTitle, tod
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
           {rows.map(({ note, showHeader, label }) => {
-            const caption = note.bookTitle
-              ? note.page != null
-                ? formatTemplate(t.notes.cardPageCaption, { book: note.bookTitle, page: note.page })
-                : formatTemplate(t.notes.cardBookCaption, { book: note.bookTitle })
-              : null;
+            const caption =
+              note.book_id === null
+                ? t.notes.noBookLabel
+                : note.bookTitle
+                  ? note.page != null
+                    ? formatTemplate(t.notes.cardPageCaption, { book: note.bookTitle, page: note.page })
+                    : formatTemplate(t.notes.cardBookCaption, { book: note.bookTitle })
+                  : null;
 
             return (
               <div key={note.id} className="contents">

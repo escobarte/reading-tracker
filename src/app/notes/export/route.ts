@@ -27,16 +27,31 @@ function noteBlock(note: NoteWithBook, locale: "ru" | "en", pageLabel: string): 
   return `> ${note.body}\n${meta}${tagsLine}`;
 }
 
-function buildMarkdown(notes: NoteWithBook[], heading: string, locale: "ru" | "en", pageLabel: string): string {
-  const byBook = new Map<string, { title: string; author: string | null; notes: NoteWithBook[] }>();
+const NO_BOOK_KEY = "__none__";
+
+function buildMarkdown(
+  notes: NoteWithBook[],
+  heading: string,
+  locale: "ru" | "en",
+  pageLabel: string,
+  noBookLabel: string,
+): string {
+  const byBook = new Map<string, { title: string; author: string | null; notes: NoteWithBook[]; noBook: boolean }>();
   for (const note of notes) {
-    const key = note.book_id;
-    const entry = byBook.get(key) ?? { title: note.bookTitle, author: note.bookAuthor, notes: [] };
+    const key = note.book_id ?? NO_BOOK_KEY;
+    const entry =
+      byBook.get(key) ??
+      (note.book_id === null
+        ? { title: noBookLabel, author: null, notes: [], noBook: true }
+        : { title: note.bookTitle, author: note.bookAuthor, notes: [], noBook: false });
     entry.notes.push(note);
     byBook.set(key, entry);
   }
 
-  const books = [...byBook.values()].sort((a, b) => a.title.localeCompare(b.title));
+  const books = [...byBook.values()].sort((a, b) => {
+    if (a.noBook !== b.noBook) return a.noBook ? 1 : -1;
+    return a.title.localeCompare(b.title);
+  });
   const sections = books.map((book) => {
     const heading2 = book.author ? `## ${book.title} — ${book.author}` : `## ${book.title}`;
     const blocks = book.notes
@@ -65,7 +80,10 @@ export async function GET(request: NextRequest) {
 
   const notes = await listNotesForExport(filters);
   const heading = t.notes.exportHeading;
-  const markdown = notes.length > 0 ? buildMarkdown(notes, heading, locale, t.notes.exportPageLabel) : `${heading}\n`;
+  const markdown =
+    notes.length > 0
+      ? buildMarkdown(notes, heading, locale, t.notes.exportPageLabel, t.notes.noBookLabel)
+      : `${heading}\n`;
   const filename = `notes-${localDateKey(new Date())}.md`;
 
   return new Response(markdown, {

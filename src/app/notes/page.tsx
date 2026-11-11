@@ -3,6 +3,7 @@ import { getDailyPagesGoal } from "@/lib/db/goals";
 import { listNotesPage } from "@/lib/db/notes";
 import { getTodaySummary } from "@/lib/db/sessions";
 import type { NoteType } from "@/lib/db/types";
+import { NO_BOOK_ID } from "@/lib/notes";
 import { NotesView } from "./NotesView";
 
 const DEFAULT_LIMIT = 30;
@@ -30,7 +31,7 @@ export default async function NotesPage({ searchParams }: PageProps<"/notes">) {
 
   const [{ notes, hasMore }, filterBook, dailyGoal, today] = await Promise.all([
     listNotesPage(filters, limit),
-    bookId ? getBook(bookId) : Promise.resolve(null),
+    bookId && bookId !== NO_BOOK_ID ? getBook(bookId) : Promise.resolve(null),
     getDailyPagesGoal(),
     getTodaySummary(),
   ]);
