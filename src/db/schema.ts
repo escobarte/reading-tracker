@@ -19,9 +19,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-
-const timestamptz = (name: string) =>
-  timestamp(name, { withTimezone: true, mode: "string" });
+import { timestamptz } from "./timestamptz";
 
 // Пользователи -----------------------------------------------------------------
 // Базовая модель "user" из Better Auth. Имена свойств — как у Better Auth,
@@ -52,7 +50,7 @@ export const books = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     user_id: ownerId(),
-    created_at: timestamptz("created_at").notNull().defaultNow(),
+    created_at: timestamptz("created_at").notNull().default(sql`now()`),
     title: text("title").notNull(),
     author: text("author"),
     cover_url: text("cover_url"),
@@ -96,7 +94,7 @@ export const readings = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     user_id: ownerId(),
-    created_at: timestamptz("created_at").notNull().defaultNow(),
+    created_at: timestamptz("created_at").notNull().default(sql`now()`),
     book_id: uuid("book_id").notNull(),
     started_at: timestamptz("started_at"),
     finished_at: timestamptz("finished_at"),
@@ -138,7 +136,7 @@ export const sessions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     user_id: ownerId(),
-    created_at: timestamptz("created_at").notNull().defaultNow(),
+    created_at: timestamptz("created_at").notNull().default(sql`now()`),
     reading_id: uuid("reading_id").notNull(),
     started_at: timestamptz("started_at").notNull(),
     ended_at: timestamptz("ended_at"),
@@ -173,7 +171,7 @@ export const notes = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     user_id: ownerId(),
-    created_at: timestamptz("created_at").notNull().defaultNow(),
+    created_at: timestamptz("created_at").notNull().default(sql`now()`),
     book_id: uuid("book_id"),
     type: text("type", { enum: ["quote", "thought", "word", "photo"] }),
     body: text("body"),
@@ -205,7 +203,7 @@ export const goals = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     user_id: ownerId(),
-    created_at: timestamptz("created_at").notNull().defaultNow(),
+    created_at: timestamptz("created_at").notNull().default(sql`now()`),
     kind: text("kind", { enum: ["yearly", "daily", "deadline"] }),
     target_value: integer("target_value"),
     year: integer("year"),
@@ -249,7 +247,7 @@ export const settings = pgTable(
       .notNull()
       .default("light"),
     reminder_time: time("reminder_time"),
-    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().default(sql`now()`),
   },
   (t) => [
     foreignKey({
