@@ -1,11 +1,11 @@
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { cache } from "react";
-import { getDb } from "@/db";
+import { getDb, type Transaction } from "@/db";
 import { books, readings, sessions } from "@/db/schema";
 import { requireUserId } from "@/lib/require-user";
 import { computeStreak, localDateKey, localDayRangeUtc } from "@/lib/time";
-import { setShelf } from "./books";
-import { assertOwnReading, firstOrThrow } from "./query";
+import { setShelfIn } from "./books";
+import { assertOwnReading, firstOrThrow, userTransaction } from "./query";
 import type { ReadingSession, SessionSource } from "./types";
 
 export type CreateSessionInput = {
@@ -29,27 +29,6 @@ function ownSessionsOfReading(userId: string, readingId: string) {
 }
 
 const maxPageOrder = sql`${sessions.page_to} desc nulls last`;
-
-export async function createSession(input: CreateSessionInput): Promise<ReadingSession> {
-  const userId = await requireUserId();
-  await assertOwnReading(userId, input.reading_id);
-  return firstOrThrow(
-    await getDb()
-      .insert(sessions)
-      .values({
-        user_id: userId,
-        reading_id: input.reading_id,
-        started_at: input.started_at,
-        ended_at: input.ended_at,
-        page_from: input.page_from,
-        page_to: input.page_to,
-        pages_read: input.page_to - input.page_from,
-        seconds: input.seconds,
-        source: input.source,
-      })
-      .returning(),
-  );
-}
 
 export async function listRecentSessions(readingId: string, limit = 5): Promise<ReadingSession[]> {
   const userId = await requireUserId();
@@ -85,29 +64,6 @@ export type UpdateSessionInput = {
   seconds: number;
 };
 
-export async function updateSession(id: string, input: UpdateSessionInput): Promise<ReadingSession> {
-  const userId = await requireUserId();
-  return firstOrThrow(
-    await getDb()
-      .update(sessions)
-      .set({
-        started_at: input.started_at,
-        ended_at: input.ended_at,
-        page_from: input.page_from,
-        page_to: input.page_to,
-        pages_read: input.page_to - input.page_from,
-        seconds: input.seconds,
-      })
-      .where(ownSession(userId, id))
-      .returning(),
-  );
-}
-
-export async function deleteSession(id: string): Promise<void> {
-  const userId = await requireUserId();
-  await getDb().delete(sessions).where(ownSession(userId, id));
-}
-
 /** page_to of the latest session of a reading, or 0 if there is none. */
 export async function getMaxPageForReading(readingId: string): Promise<number> {
   const userId = await requireUserId();
@@ -141,25 +97,31 @@ export type SyncResult = { justFinished: boolean; needsRevertConfirm: boolean };
  * closes the reading when a session reaches the last page, and flags for confirmation
  * when an edit or delete leaves a finished reading short of the last page.
  */
-export async function syncReadingCompletion(bookId: string, readingId: string): Promise<SyncResult> {
-  const userId = await requireUserId();
-  const db = getDb();
-  const [bookRows, readingRows] = await Promise.all([
-    db
+async function syncReadingCompletion(
+  tx: Transaction,
+  userId: string,
+  bookId: string,
+  readingId: string,
+): Promise<SyncResult> {
+  const book = firstOrThrow(
+    await tx
       .select({ total_pages: books.total_pages })
       .from(books)
       .where(and(eq(books.id, bookId), eq(books.user_id, userId))),
-    db
-      .select({ finished_at: readings.finished_at })
-      .from(readings)
-      .where(and(eq(readings.id, readingId), eq(readings.user_id, userId))),
-  ]);
-  const book = firstOrThrow(bookRows);
-  const reading = firstOrThrow(readingRows);
+  );
+  // Прочтение должно относиться к этой книге, иначе «прочитанной» стала бы другая.
+  const ownReadingOfBook = and(
+    eq(readings.id, readingId),
+    eq(readings.user_id, userId),
+    eq(readings.book_id, bookId),
+  );
+  const reading = firstOrThrow(
+    await tx.select({ finished_at: readings.finished_at }).from(readings).where(ownReadingOfBook),
+  );
 
   if (!book.total_pages) return { justFinished: false, needsRevertConfirm: false };
 
-  const [maxRow] = await db
+  const [maxRow] = await tx
     .select({ page_to: sessions.page_to, ended_at: sessions.ended_at, started_at: sessions.started_at })
     .from(sessions)
     .where(ownSessionsOfReading(userId, readingId))
@@ -171,11 +133,8 @@ export async function syncReadingCompletion(bookId: string, readingId: string): 
 
   if (reachedEnd && !reading.finished_at) {
     const finishedAt = maxRow?.ended_at ?? maxRow?.started_at ?? new Date().toISOString();
-    await db
-      .update(readings)
-      .set({ finished_at: finishedAt })
-      .where(and(eq(readings.id, readingId), eq(readings.user_id, userId)));
-    await setShelf(bookId, "done");
+    await tx.update(readings).set({ finished_at: finishedAt }).where(ownReadingOfBook);
+    await setShelfIn(tx, userId, bookId, "done");
     return { justFinished: true, needsRevertConfirm: false };
   }
 
@@ -184,6 +143,57 @@ export async function syncReadingCompletion(bookId: string, readingId: string): 
   }
 
   return { justFinished: false, needsRevertConfirm: false };
+}
+
+// Изменение сессии и состояние прочтения сохраняются одной транзакцией.
+
+export async function createSessionAndSync(bookId: string, input: CreateSessionInput): Promise<SyncResult> {
+  return userTransaction(async (tx, userId) => {
+    await assertOwnReading(tx, userId, input.reading_id);
+    await tx.insert(sessions).values({
+      user_id: userId,
+      reading_id: input.reading_id,
+      started_at: input.started_at,
+      ended_at: input.ended_at,
+      page_from: input.page_from,
+      page_to: input.page_to,
+      pages_read: input.page_to - input.page_from,
+      seconds: input.seconds,
+      source: input.source,
+    });
+    return syncReadingCompletion(tx, userId, bookId, input.reading_id);
+  });
+}
+
+export async function updateSessionAndSync(
+  id: string,
+  bookId: string,
+  input: UpdateSessionInput,
+): Promise<SyncResult> {
+  return userTransaction(async (tx, userId) => {
+    const session = firstOrThrow(
+      await tx
+        .update(sessions)
+        .set({
+          started_at: input.started_at,
+          ended_at: input.ended_at,
+          page_from: input.page_from,
+          page_to: input.page_to,
+          pages_read: input.page_to - input.page_from,
+          seconds: input.seconds,
+        })
+        .where(ownSession(userId, id))
+        .returning({ reading_id: sessions.reading_id }),
+    );
+    return syncReadingCompletion(tx, userId, bookId, session.reading_id);
+  });
+}
+
+export async function deleteSessionAndSync(id: string, bookId: string, readingId: string): Promise<SyncResult> {
+  return userTransaction(async (tx, userId) => {
+    await tx.delete(sessions).where(ownSession(userId, id));
+    return syncReadingCompletion(tx, userId, bookId, readingId);
+  });
 }
 
 export type ReadingStats = {

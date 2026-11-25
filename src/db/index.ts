@@ -4,6 +4,9 @@ import postgres from "postgres";
 import * as schema from "./schema";
 
 export type Database = PostgresJsDatabase<typeof schema>;
+export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+/** Сама база или открытая транзакция: для запросов, которые бывают и там, и там. */
+export type Executor = Database | Transaction;
 
 // globalThis: в dev горячая перезагрузка перечитывает модуль и без этого плодила бы пулы соединений.
 const globalForDb = globalThis as typeof globalThis & { readingTrackerDb?: Database };

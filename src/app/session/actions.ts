@@ -5,11 +5,10 @@ import { getBook, moveShelf } from "@/lib/db/books";
 import { getDailyPagesGoal } from "@/lib/db/goals";
 import { ensureOpenReading } from "@/lib/db/readings";
 import {
-  createSession,
+  createSessionAndSync,
   getCurrentPage,
   getStreakDays,
   getTodaySummary,
-  syncReadingCompletion,
   type CreateSessionInput,
 } from "@/lib/db/sessions";
 import type { Book } from "@/lib/db/types";
@@ -53,8 +52,7 @@ export async function saveSessionAction(
   input: CreateSessionInput & { bookId: string },
 ): Promise<{ closedReading: boolean }> {
   const { bookId, ...sessionInput } = input;
-  const session = await createSession(sessionInput);
-  const sync = await syncReadingCompletion(bookId, session.reading_id);
+  const sync = await createSessionAndSync(bookId, sessionInput);
   revalidatePath(`/books/${bookId}`);
   revalidatePath(`/books/${bookId}/history`);
   revalidatePath("/library");

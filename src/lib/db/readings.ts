@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import { getDb } from "@/db";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { getDb, type Executor } from "@/db";
 import { readings } from "@/db/schema";
 import type { PauseReasonCode } from "@/lib/pause-reasons";
 import { requireUserId } from "@/lib/require-user";
-import { setShelf } from "./books";
-import { assertOwnBook, firstOrThrow } from "./query";
+import { setShelfIn } from "./books";
+import { ensureOpenReadingIn, findOpenReading, firstOrThrow, userTransaction } from "./query";
 import type { Reading } from "./types";
 
 /** Прочтение по id, только своё. */
@@ -19,10 +19,14 @@ function ownReadingsOfBook(userId: string, bookId: string) {
 
 export async function getOpenReading(bookId: string): Promise<Reading | null> {
   const userId = await requireUserId();
-  const [reading] = await getDb()
+  return findOpenReading(getDb(), userId, bookId);
+}
+
+async function findLatestReading(db: Executor, userId: string, bookId: string): Promise<Reading | null> {
+  const [reading] = await db
     .select()
     .from(readings)
-    .where(and(ownReadingsOfBook(userId, bookId), isNull(readings.finished_at)))
+    .where(ownReadingsOfBook(userId, bookId))
     .orderBy(desc(readings.started_at))
     .limit(1);
   return reading ?? null;
@@ -31,13 +35,7 @@ export async function getOpenReading(bookId: string): Promise<Reading | null> {
 /** The book's most recent reading, open or finished — the one progress and history are shown for. */
 export async function getLatestReading(bookId: string): Promise<Reading | null> {
   const userId = await requireUserId();
-  const [reading] = await getDb()
-    .select()
-    .from(readings)
-    .where(ownReadingsOfBook(userId, bookId))
-    .orderBy(desc(readings.started_at))
-    .limit(1);
-  return reading ?? null;
+  return findLatestReading(getDb(), userId, bookId);
 }
 
 /** Последнее закрытое прочтение книги (не брошенное) — то, для которого показывается экран «Книга прочитана». */
@@ -103,24 +101,15 @@ export async function listReadings(bookId: string): Promise<Reading[]> {
 
 /** Returns the book's open reading, creating one if it doesn't exist yet. */
 export async function ensureOpenReading(bookId: string): Promise<Reading> {
-  const existing = await getOpenReading(bookId);
-  if (existing) return existing;
-
-  const userId = await requireUserId();
-  await assertOwnBook(userId, bookId);
-  return firstOrThrow(
-    await getDb()
-      .insert(readings)
-      .values({ user_id: userId, book_id: bookId, started_at: new Date().toISOString() })
-      .returning(),
-  );
+  return userTransaction((tx, userId) => ensureOpenReadingIn(tx, userId, bookId));
 }
 
 /** Reopens a finished reading (finished_at cleared) and moves the book back to "reading". */
 export async function reopenReading(readingId: string, bookId: string): Promise<void> {
-  const userId = await requireUserId();
-  await getDb().update(readings).set({ finished_at: null }).where(ownReading(userId, readingId));
-  await setShelf(bookId, "reading");
+  await userTransaction(async (tx, userId) => {
+    await tx.update(readings).set({ finished_at: null }).where(ownReading(userId, readingId));
+    await setShelfIn(tx, userId, bookId, "reading");
+  });
 }
 
 /**
@@ -128,17 +117,18 @@ export async function reopenReading(readingId: string, bookId: string): Promise<
  * pause/drop markers, if any — also used to resume a paused or return a dropped book.
  */
 export async function continueLastReading(bookId: string): Promise<void> {
-  const reading = await getLatestReading(bookId);
+  await userTransaction(async (tx, userId) => {
+    const reading = await findLatestReading(tx, userId, bookId);
 
-  if (reading) {
-    const userId = await requireUserId();
-    await getDb()
-      .update(readings)
-      .set({ finished_at: null, is_dropped: false, stopped_at: null, pause_reason: null, pause_note: null })
-      .where(ownReading(userId, reading.id));
-  }
+    if (reading) {
+      await tx
+        .update(readings)
+        .set({ finished_at: null, is_dropped: false, stopped_at: null, pause_reason: null, pause_note: null })
+        .where(ownReading(userId, reading.id));
+    }
 
-  await setShelf(bookId, "reading");
+    await setShelfIn(tx, userId, bookId, "reading");
+  });
 }
 
 const PAUSE_NOTE_MAX = 1000;
@@ -165,14 +155,15 @@ export async function pauseReading(
   const clampedNote = clampPauseNote(note);
   requireNoteForOther(reasonCode, clampedNote);
 
-  const reading = await ensureOpenReading(bookId);
-  const userId = await requireUserId();
-  await getDb()
-    .update(readings)
-    .set({ pause_reason: reasonCode, pause_note: clampedNote, stopped_at: new Date().toISOString() })
-    .where(ownReading(userId, reading.id));
+  await userTransaction(async (tx, userId) => {
+    const reading = await ensureOpenReadingIn(tx, userId, bookId);
+    await tx
+      .update(readings)
+      .set({ pause_reason: reasonCode, pause_note: clampedNote, stopped_at: new Date().toISOString() })
+      .where(ownReading(userId, reading.id));
 
-  await setShelf(bookId, "paused");
+    await setShelfIn(tx, userId, bookId, "paused");
+  });
 }
 
 /** Отказ: прочтение закрывается датой остановки и помечается брошенным — в «Прочитано» не попадает. */
@@ -184,21 +175,22 @@ export async function dropReading(
   const clampedNote = clampPauseNote(note);
   requireNoteForOther(reasonCode, clampedNote);
 
-  const reading = await ensureOpenReading(bookId);
-  const userId = await requireUserId();
-  const now = new Date().toISOString();
-  await getDb()
-    .update(readings)
-    .set({
-      finished_at: now,
-      is_dropped: true,
-      pause_reason: reasonCode,
-      pause_note: clampedNote,
-      stopped_at: now,
-    })
-    .where(ownReading(userId, reading.id));
+  await userTransaction(async (tx, userId) => {
+    const reading = await ensureOpenReadingIn(tx, userId, bookId);
+    const now = new Date().toISOString();
+    await tx
+      .update(readings)
+      .set({
+        finished_at: now,
+        is_dropped: true,
+        pause_reason: reasonCode,
+        pause_note: clampedNote,
+        stopped_at: now,
+      })
+      .where(ownReading(userId, reading.id));
 
-  await setShelf(bookId, "dropped");
+    await setShelfIn(tx, userId, bookId, "dropped");
+  });
 }
 
 /** Самое свежее прочтение каждой книги (открытое или закрытое) — для карточек архива в Библиотеке, одним запросом. */

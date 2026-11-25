@@ -3,9 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { reopenReading } from "@/lib/db/readings";
 import {
-  deleteSession,
-  syncReadingCompletion,
-  updateSession,
+  deleteSessionAndSync,
+  updateSessionAndSync,
   type UpdateSessionInput,
 } from "@/lib/db/sessions";
 
@@ -23,8 +22,7 @@ export async function updateSessionAction(
   bookId: string,
   input: UpdateSessionInput,
 ): Promise<SessionMutationResult> {
-  const session = await updateSession(id, input);
-  const sync = await syncReadingCompletion(bookId, session.reading_id);
+  const sync = await updateSessionAndSync(id, bookId, input);
   revalidateBook(bookId);
   return { closedReading: sync.justFinished, needsRevertConfirm: sync.needsRevertConfirm };
 }
@@ -34,8 +32,7 @@ export async function deleteSessionAction(
   bookId: string,
   readingId: string,
 ): Promise<SessionMutationResult> {
-  await deleteSession(id);
-  const sync = await syncReadingCompletion(bookId, readingId);
+  const sync = await deleteSessionAndSync(id, bookId, readingId);
   revalidateBook(bookId);
   return { closedReading: sync.justFinished, needsRevertConfirm: sync.needsRevertConfirm };
 }

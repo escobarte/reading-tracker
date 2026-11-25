@@ -36,17 +36,15 @@ export const getDailyPagesGoal = cache(async (): Promise<number> => {
 export async function setDailyPagesGoal(value: number): Promise<number> {
   const clamped = clamp(value, DAILY_PAGES_RANGE.min, DAILY_PAGES_RANGE.max);
   const userId = await requireUserId();
-  const db = getDb();
-  const [existing] = await db.select({ id: goals.id }).from(goals).where(ownDailyGoal(userId));
-
-  if (existing) {
-    await db
-      .update(goals)
-      .set({ target_value: clamped })
-      .where(and(eq(goals.id, existing.id), eq(goals.user_id, userId)));
-  } else {
-    await db.insert(goals).values({ user_id: userId, kind: "daily", target_value: clamped });
-  }
+  // Условие targetWhere повторяет частичный индекс goals_one_daily_per_user.
+  await getDb()
+    .insert(goals)
+    .values({ user_id: userId, kind: "daily", target_value: clamped })
+    .onConflictDoUpdate({
+      target: goals.user_id,
+      targetWhere: sql`kind = 'daily'`,
+      set: { target_value: clamped },
+    });
   return clamped;
 }
 
@@ -65,23 +63,17 @@ export async function getDeadlineGoal(readingId: string): Promise<DeadlineGoal |
 export async function saveDeadlineGoal(readingId: string, dueDate: string, skipWeekdays: number[]): Promise<void> {
   const userId = await requireUserId();
   const db = getDb();
-  const [existing] = await db.select({ id: goals.id }).from(goals).where(ownDeadlineGoal(userId, readingId));
-
-  if (existing) {
-    await db
-      .update(goals)
-      .set({ due_date: dueDate, skip_weekdays: skipWeekdays })
-      .where(and(eq(goals.id, existing.id), eq(goals.user_id, userId)));
-  } else {
-    await assertOwnReading(userId, readingId);
-    await db.insert(goals).values({
-      user_id: userId,
-      kind: "deadline",
-      reading_id: readingId,
-      due_date: dueDate,
-      skip_weekdays: skipWeekdays,
+  await assertOwnReading(db, userId, readingId);
+  const values = { due_date: dueDate, skip_weekdays: skipWeekdays };
+  // Условие targetWhere повторяет частичный индекс goals_one_deadline_per_reading.
+  await db
+    .insert(goals)
+    .values({ user_id: userId, kind: "deadline", reading_id: readingId, ...values })
+    .onConflictDoUpdate({
+      target: [goals.user_id, goals.reading_id],
+      targetWhere: sql`kind = 'deadline'`,
+      set: values,
     });
-  }
 }
 
 export async function deleteDeadlineGoal(readingId: string): Promise<void> {

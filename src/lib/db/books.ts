@@ -1,9 +1,15 @@
-import { and, desc, eq, ilike, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { getDb } from "@/db";
+import { and, desc, eq, ilike, inArray, isNotNull, sql } from "drizzle-orm";
+import { getDb, type Transaction } from "@/db";
 import { books, readings } from "@/db/schema";
 import { requireUserId } from "@/lib/require-user";
 import { localYear } from "@/lib/time";
-import { assertOwnBook, firstOrThrow } from "./query";
+import {
+  assertOwnBook,
+  ensureOpenReadingIn,
+  findOpenReading,
+  firstOrThrow,
+  userTransaction,
+} from "./query";
 import type { Book, BookFormat, BookShelf } from "./types";
 
 export type BookInput = {
@@ -71,72 +77,64 @@ export async function findDuplicateBook(input: {
   return match ?? null;
 }
 
-async function nextQueuePosition(userId: string): Promise<number> {
-  const [last] = await getDb()
+async function nextQueuePosition(tx: Transaction, userId: string): Promise<number> {
+  const [last] = await tx
     .select({ queue_position: books.queue_position })
     .from(books)
     .where(and(eq(books.user_id, userId), eq(books.shelf, "want")))
-    .orderBy(desc(books.queue_position))
+    .orderBy(sql`${books.queue_position} desc nulls last`)
     .limit(1);
   return (last?.queue_position ?? 0) + 1;
 }
 
-async function renumberQueue(userId: string): Promise<void> {
-  const db = getDb();
-  const queue = await db
-    .select({ id: books.id, queue_position: books.queue_position })
-    .from(books)
-    .where(and(eq(books.user_id, userId), eq(books.shelf, "want")))
-    .orderBy(queueOrder);
-
-  const updates = queue
-    .map((book, index) => ({ id: book.id, position: index + 1, changed: book.queue_position !== index + 1 }))
-    .filter((entry) => entry.changed);
-
-  await Promise.all(
-    updates.map((entry) =>
-      db.update(books).set({ queue_position: entry.position }).where(ownBook(userId, entry.id)),
-    ),
-  );
+/** Нумерует очередь «Хочу прочитать» подряд с 1 одним запросом; меняет только строки с другим номером. */
+async function renumberQueue(tx: Transaction, userId: string): Promise<void> {
+  await tx.execute(sql`
+    update ${books} set queue_position = ranked.position
+    from (
+      select ${books.id} as id,
+             row_number() over (order by ${queueOrder}, ${books.created_at} desc) as position
+      from ${books}
+      where ${books.user_id} = ${userId} and ${books.shelf} = 'want'
+    ) as ranked
+    where ${books.id} = ranked.id
+      and ${books.user_id} = ${userId}
+      and ${books.queue_position} is distinct from ranked.position
+  `);
 }
 
 export async function createBook(input: BookInput): Promise<Book> {
-  const userId = await requireUserId();
-  const db = getDb();
-  const shelf = input.shelf ?? "want";
+  return userTransaction(async (tx, userId) => {
+    const shelf = input.shelf ?? "want";
+    const queue_position = shelf === "want" ? await nextQueuePosition(tx, userId) : null;
 
-  const queue_position = shelf === "want" ? await nextQueuePosition(userId) : null;
+    const book = firstOrThrow(
+      await tx
+        .insert(books)
+        .values({
+          user_id: userId,
+          title: input.title.trim(),
+          author: input.author?.trim() || null,
+          cover_url: input.cover_url || null,
+          total_pages: input.total_pages ?? null,
+          format: input.format ?? "paper",
+          shelf,
+          queue_position,
+          series: input.series || null,
+          series_number: input.series_number ?? null,
+          genre: input.genre || null,
+          tags: input.tags ?? [],
+          google_books_id: input.google_books_id || null,
+          isbn: input.isbn || null,
+          language: input.language || null,
+        })
+        .returning(),
+    );
 
-  const book = firstOrThrow(
-    await db
-      .insert(books)
-      .values({
-        user_id: userId,
-        title: input.title.trim(),
-        author: input.author?.trim() || null,
-        cover_url: input.cover_url || null,
-        total_pages: input.total_pages ?? null,
-        format: input.format ?? "paper",
-        shelf,
-        queue_position,
-        series: input.series || null,
-        series_number: input.series_number ?? null,
-        genre: input.genre || null,
-        tags: input.tags ?? [],
-        google_books_id: input.google_books_id || null,
-        isbn: input.isbn || null,
-        language: input.language || null,
-      })
-      .returning(),
-  );
+    if (shelf === "reading") await ensureOpenReadingIn(tx, userId, book.id);
 
-  if (shelf === "reading") {
-    await db
-      .insert(readings)
-      .values({ user_id: userId, book_id: book.id, started_at: new Date().toISOString() });
-  }
-
-  return book;
+    return book;
+  });
 }
 
 export async function updateBook(id: string, input: Partial<BookInput>): Promise<Book> {
@@ -159,109 +157,75 @@ export async function updateBook(id: string, input: Partial<BookInput>): Promise
 }
 
 export async function deleteBook(id: string): Promise<void> {
-  const userId = await requireUserId();
-  await getDb().delete(books).where(ownBook(userId, id));
-  await renumberQueue(userId);
+  await userTransaction(async (tx, userId) => {
+    await tx.delete(books).where(ownBook(userId, id));
+    await renumberQueue(tx, userId);
+  });
 }
 
+/** Новый порядок очереди. Список приходит из браузера и мог устареть, поэтому в конце перенумерация. */
 export async function reorderQueue(orderedIds: string[]): Promise<void> {
-  const userId = await requireUserId();
-  const db = getDb();
-  await Promise.all(
-    orderedIds.map((id, index) =>
-      db.update(books).set({ queue_position: index + 1 }).where(ownBook(userId, id)),
-    ),
+  if (orderedIds.length === 0) return;
+  const rows = sql.join(
+    orderedIds.map((id, index) => sql`(${id}::uuid, ${index + 1}::int)`),
+    sql`, `,
   );
+  await userTransaction(async (tx, userId) => {
+    await tx.execute(sql`
+      update ${books} set queue_position = ordered.position
+      from (values ${rows}) as ordered(id, position)
+      where ${books.id} = ordered.id
+        and ${books.user_id} = ${userId}
+        and ${books.shelf} = 'want'
+    `);
+    await renumberQueue(tx, userId);
+  });
 }
 
-/** Sets the shelf directly, without touching readings. Used where reading state is managed separately. */
-export async function setShelf(id: string, shelf: BookShelf): Promise<void> {
-  const userId = await requireUserId();
-  const queue_position = shelf === "want" ? await nextQueuePosition(userId) : null;
-  await getDb().update(books).set({ shelf, queue_position }).where(ownBook(userId, id));
-  if (shelf !== "want") await renumberQueue(userId);
-}
-
-/** id открытого прочтения книги (начатого последним) или `null`. */
-async function findOpenReadingId(userId: string, bookId: string): Promise<string | null> {
-  const [reading] = await getDb()
-    .select({ id: readings.id })
-    .from(readings)
-    .where(and(eq(readings.user_id, userId), eq(readings.book_id, bookId), isNull(readings.finished_at)))
-    .orderBy(desc(readings.started_at))
-    .limit(1);
-  return reading?.id ?? null;
-}
-
-function ownReading(userId: string, id: string) {
-  return and(eq(readings.id, id), eq(readings.user_id, userId));
+/** Ставит книгу на полку и перенумеровывает очередь; прочтения не трогает. */
+export async function setShelfIn(tx: Transaction, userId: string, id: string, shelf: BookShelf): Promise<void> {
+  const queue_position = shelf === "want" ? await nextQueuePosition(tx, userId) : null;
+  await tx.update(books).set({ shelf, queue_position }).where(ownBook(userId, id));
+  await renumberQueue(tx, userId);
 }
 
 /** Закрывает открытое прочтение без зачёта (is_dropped), если оно есть — книга переходит на полку без сохранённого прогресса чтения. */
-async function closeOpenReadingWithoutCredit(userId: string, bookId: string): Promise<void> {
-  const openReadingId = await findOpenReadingId(userId, bookId);
+async function closeOpenReadingWithoutCredit(tx: Transaction, userId: string, bookId: string): Promise<void> {
+  const openReading = await findOpenReading(tx, userId, bookId);
 
-  if (openReadingId) {
-    await getDb()
+  if (openReading) {
+    await tx
       .update(readings)
       .set({ finished_at: new Date().toISOString(), is_dropped: true })
-      .where(ownReading(userId, openReadingId));
+      .where(and(eq(readings.id, openReading.id), eq(readings.user_id, userId)));
   }
 }
 
+/** Отмечает книгу прочитанной: закрывает открытое прочтение или создаёт уже закрытое. */
+async function finishReading(tx: Transaction, userId: string, bookId: string): Promise<void> {
+  const openReading = await findOpenReading(tx, userId, bookId);
+  const now = new Date().toISOString();
+
+  if (openReading) {
+    await tx
+      .update(readings)
+      .set({ finished_at: now })
+      .where(and(eq(readings.id, openReading.id), eq(readings.user_id, userId)));
+  } else {
+    await assertOwnBook(tx, userId, bookId);
+    await tx.insert(readings).values({ user_id: userId, book_id: bookId, started_at: now, finished_at: now });
+  }
+}
+
+/** Смена полки вместе с прочтением. Для paused и dropped с причиной есть pauseReading и dropReading. */
 export async function moveShelf(id: string, shelf: BookShelf): Promise<void> {
-  const userId = await requireUserId();
-  const db = getDb();
+  await userTransaction(async (tx, userId) => {
+    if (shelf === "want" || shelf === "collection") await closeOpenReadingWithoutCredit(tx, userId, id);
+    if (shelf === "reading") await ensureOpenReadingIn(tx, userId, id);
+    if (shelf === "done") await finishReading(tx, userId, id);
 
-  if (shelf === "want") {
-    await closeOpenReadingWithoutCredit(userId, id);
-
-    const queue_position = await nextQueuePosition(userId);
-    await db.update(books).set({ shelf, queue_position }).where(ownBook(userId, id));
-    return;
-  }
-
-  if (shelf === "collection") {
-    await closeOpenReadingWithoutCredit(userId, id);
-
-    await db.update(books).set({ shelf, queue_position: null }).where(ownBook(userId, id));
-    await renumberQueue(userId);
-    return;
-  }
-
-  if (shelf === "reading") {
-    const openReadingId = await findOpenReadingId(userId, id);
-
-    if (!openReadingId) {
-      await assertOwnBook(userId, id);
-      await db.insert(readings).values({ user_id: userId, book_id: id, started_at: new Date().toISOString() });
-    }
-
-    await db.update(books).set({ shelf, queue_position: null }).where(ownBook(userId, id));
-    await renumberQueue(userId);
-    return;
-  }
-
-  if (shelf === "done") {
-    const openReadingId = await findOpenReadingId(userId, id);
-
-    const now = new Date().toISOString();
-    if (openReadingId) {
-      await db.update(readings).set({ finished_at: now }).where(ownReading(userId, openReadingId));
-    } else {
-      await assertOwnBook(userId, id);
-      await db.insert(readings).values({ user_id: userId, book_id: id, started_at: now, finished_at: now });
-    }
-
-    await db.update(books).set({ shelf, queue_position: null }).where(ownBook(userId, id));
-    await renumberQueue(userId);
-    return;
-  }
-
-  // paused / dropped without a reason — the usual paths go through pauseReading/dropReading instead,
-  // which also set the reason and close/keep the reading; this is a plain shelf move.
-  await db.update(books).set({ shelf, queue_position: null }).where(ownBook(userId, id));
-  await renumberQueue(userId);
+    await setShelfIn(tx, userId, id, shelf);
+  });
 }
 
 export type YearPlanBook = { id: string; title: string; totalPages: number | null; read: boolean };
