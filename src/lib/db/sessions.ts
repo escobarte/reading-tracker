@@ -1,7 +1,11 @@
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/db";
+import { books, readings, sessions } from "@/db/schema";
+import { requireUserId } from "@/lib/require-user";
 import { computeStreak, localDateKey, localDayRangeUtc } from "@/lib/time";
 import { setShelf } from "./books";
+import { assertOwnReading, firstOrThrow } from "./query";
 import type { ReadingSession, SessionSource } from "./types";
 
 export type CreateSessionInput = {
@@ -14,55 +18,63 @@ export type CreateSessionInput = {
   source: SessionSource;
 };
 
+/** Сессия по id, только своя. */
+function ownSession(userId: string, id: string) {
+  return and(eq(sessions.id, id), eq(sessions.user_id, userId));
+}
+
+/** Сессии прочтения, только свои. */
+function ownSessionsOfReading(userId: string, readingId: string) {
+  return and(eq(sessions.user_id, userId), eq(sessions.reading_id, readingId));
+}
+
+const maxPageOrder = sql`${sessions.page_to} desc nulls last`;
+
 export async function createSession(input: CreateSessionInput): Promise<ReadingSession> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("sessions")
-    .insert({
-      reading_id: input.reading_id,
-      started_at: input.started_at,
-      ended_at: input.ended_at,
-      page_from: input.page_from,
-      page_to: input.page_to,
-      pages_read: input.page_to - input.page_from,
-      seconds: input.seconds,
-      source: input.source,
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data;
+  const userId = await requireUserId();
+  await assertOwnReading(userId, input.reading_id);
+  return firstOrThrow(
+    await getDb()
+      .insert(sessions)
+      .values({
+        user_id: userId,
+        reading_id: input.reading_id,
+        started_at: input.started_at,
+        ended_at: input.ended_at,
+        page_from: input.page_from,
+        page_to: input.page_to,
+        pages_read: input.page_to - input.page_from,
+        seconds: input.seconds,
+        source: input.source,
+      })
+      .returning(),
+  );
 }
 
 export async function listRecentSessions(readingId: string, limit = 5): Promise<ReadingSession[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("reading_id", readingId)
-    .order("started_at", { ascending: false })
+  const userId = await requireUserId();
+  return getDb()
+    .select()
+    .from(sessions)
+    .where(ownSessionsOfReading(userId, readingId))
+    .orderBy(desc(sessions.started_at))
     .limit(limit);
-  if (error) throw error;
-  return data ?? [];
 }
 
 /** All sessions of a reading, newest first — for the "all history" screen. */
 export async function listAllSessions(readingId: string): Promise<ReadingSession[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("reading_id", readingId)
-    .order("started_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  const userId = await requireUserId();
+  return getDb()
+    .select()
+    .from(sessions)
+    .where(ownSessionsOfReading(userId, readingId))
+    .orderBy(desc(sessions.started_at));
 }
 
 export async function getSession(id: string): Promise<ReadingSession | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("sessions").select("*").eq("id", id).maybeSingle();
-  if (error) throw error;
-  return data;
+  const userId = await requireUserId();
+  const [session] = await getDb().select().from(sessions).where(ownSession(userId, id));
+  return session ?? null;
 }
 
 export type UpdateSessionInput = {
@@ -74,55 +86,49 @@ export type UpdateSessionInput = {
 };
 
 export async function updateSession(id: string, input: UpdateSessionInput): Promise<ReadingSession> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("sessions")
-    .update({
-      started_at: input.started_at,
-      ended_at: input.ended_at,
-      page_from: input.page_from,
-      page_to: input.page_to,
-      pages_read: input.page_to - input.page_from,
-      seconds: input.seconds,
-    })
-    .eq("id", id)
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data;
+  const userId = await requireUserId();
+  return firstOrThrow(
+    await getDb()
+      .update(sessions)
+      .set({
+        started_at: input.started_at,
+        ended_at: input.ended_at,
+        page_from: input.page_from,
+        page_to: input.page_to,
+        pages_read: input.page_to - input.page_from,
+        seconds: input.seconds,
+      })
+      .where(ownSession(userId, id))
+      .returning(),
+  );
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase.from("sessions").delete().eq("id", id);
-  if (error) throw error;
+  const userId = await requireUserId();
+  await getDb().delete(sessions).where(ownSession(userId, id));
 }
 
 /** page_to of the latest session of a reading, or 0 if there is none. */
 export async function getMaxPageForReading(readingId: string): Promise<number> {
-  const supabase = await createClient();
-  const { data: session, error: sessionError } = await supabase
-    .from("sessions")
-    .select("page_to")
-    .eq("reading_id", readingId)
-    .order("page_to", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  if (sessionError) throw sessionError;
+  const userId = await requireUserId();
+  const [session] = await getDb()
+    .select({ page_to: sessions.page_to })
+    .from(sessions)
+    .where(ownSessionsOfReading(userId, readingId))
+    .orderBy(maxPageOrder)
+    .limit(1);
   return session?.page_to ?? 0;
 }
 
 /** page_to of the latest session of the book's open reading, or 0 if there is none. */
 export async function getCurrentPage(bookId: string): Promise<number> {
-  const supabase = await createClient();
-  const { data: reading, error: readingError } = await supabase
-    .from("readings")
-    .select("id")
-    .eq("book_id", bookId)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (readingError) throw readingError;
+  const userId = await requireUserId();
+  const [reading] = await getDb()
+    .select({ id: readings.id })
+    .from(readings)
+    .where(and(eq(readings.user_id, userId), eq(readings.book_id, bookId)))
+    .orderBy(desc(readings.started_at))
+    .limit(1);
   if (!reading) return 0;
 
   return getMaxPageForReading(reading.id);
@@ -136,35 +142,39 @@ export type SyncResult = { justFinished: boolean; needsRevertConfirm: boolean };
  * when an edit or delete leaves a finished reading short of the last page.
  */
 export async function syncReadingCompletion(bookId: string, readingId: string): Promise<SyncResult> {
-  const supabase = await createClient();
-  const [{ data: book, error: bookError }, { data: reading, error: readingError }] = await Promise.all([
-    supabase.from("books").select("total_pages").eq("id", bookId).single(),
-    supabase.from("readings").select("finished_at").eq("id", readingId).single(),
+  const userId = await requireUserId();
+  const db = getDb();
+  const [bookRows, readingRows] = await Promise.all([
+    db
+      .select({ total_pages: books.total_pages })
+      .from(books)
+      .where(and(eq(books.id, bookId), eq(books.user_id, userId))),
+    db
+      .select({ finished_at: readings.finished_at })
+      .from(readings)
+      .where(and(eq(readings.id, readingId), eq(readings.user_id, userId))),
   ]);
-  if (bookError) throw bookError;
-  if (readingError) throw readingError;
+  const book = firstOrThrow(bookRows);
+  const reading = firstOrThrow(readingRows);
 
   if (!book.total_pages) return { justFinished: false, needsRevertConfirm: false };
 
-  const { data: maxRow, error: maxError } = await supabase
-    .from("sessions")
-    .select("page_to, ended_at, started_at")
-    .eq("reading_id", readingId)
-    .order("page_to", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  if (maxError) throw maxError;
+  const [maxRow] = await db
+    .select({ page_to: sessions.page_to, ended_at: sessions.ended_at, started_at: sessions.started_at })
+    .from(sessions)
+    .where(ownSessionsOfReading(userId, readingId))
+    .orderBy(maxPageOrder)
+    .limit(1);
 
   const maxPageTo = maxRow?.page_to ?? 0;
   const reachedEnd = maxPageTo >= book.total_pages;
 
   if (reachedEnd && !reading.finished_at) {
     const finishedAt = maxRow?.ended_at ?? maxRow?.started_at ?? new Date().toISOString();
-    const { error: finishError } = await supabase
-      .from("readings")
-      .update({ finished_at: finishedAt })
-      .eq("id", readingId);
-    if (finishError) throw finishError;
+    await db
+      .update(readings)
+      .set({ finished_at: finishedAt })
+      .where(and(eq(readings.id, readingId), eq(readings.user_id, userId)));
     await setShelf(bookId, "done");
     return { justFinished: true, needsRevertConfirm: false };
   }
@@ -184,17 +194,15 @@ export type ReadingStats = {
 };
 
 export async function getReadingStats(readingId: string): Promise<ReadingStats> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("seconds, pages_read")
-    .eq("reading_id", readingId);
-  if (error) throw error;
+  const userId = await requireUserId();
+  const rows = await getDb()
+    .select({ seconds: sessions.seconds, pages_read: sessions.pages_read })
+    .from(sessions)
+    .where(ownSessionsOfReading(userId, readingId));
 
-  const sessions = data ?? [];
-  const totalSeconds = sessions.reduce((sum, s) => sum + (s.seconds ?? 0), 0);
-  const totalPages = sessions.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
-  const sessionCount = sessions.length;
+  const totalSeconds = rows.reduce((sum, s) => sum + (s.seconds ?? 0), 0);
+  const totalPages = rows.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
+  const sessionCount = rows.length;
   const totalMinutes = Math.round(totalSeconds / 60);
 
   return {
@@ -209,17 +217,15 @@ export type ReadingWrapupStats = { days: number; minutes: number; pages: number 
 
 /** Дни, время и страницы прочтения — считается по сессиям, для плиток экрана «Книга прочитана». */
 export async function getReadingWrapupStats(readingId: string): Promise<ReadingWrapupStats> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("started_at, seconds, pages_read")
-    .eq("reading_id", readingId);
-  if (error) throw error;
+  const userId = await requireUserId();
+  const rows = await getDb()
+    .select({ started_at: sessions.started_at, seconds: sessions.seconds, pages_read: sessions.pages_read })
+    .from(sessions)
+    .where(ownSessionsOfReading(userId, readingId));
 
-  const sessions = data ?? [];
-  const minutes = Math.round(sessions.reduce((sum, s) => sum + (s.seconds ?? 0), 0) / 60);
-  const pages = sessions.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
-  const days = new Set(sessions.map((s) => localDateKey(s.started_at))).size;
+  const minutes = Math.round(rows.reduce((sum, s) => sum + (s.seconds ?? 0), 0) / 60);
+  const pages = rows.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
+  const days = new Set(rows.map((s) => localDateKey(s.started_at))).size;
   return { days, minutes, pages };
 }
 
@@ -227,27 +233,32 @@ export type TodaySummary = { pages: number; minutes: number; sessionCount: numbe
 
 /** cache(): несколько компонентов одного запроса (layout, Sidebar, сама страница) читают сводку за сегодня один раз. */
 export const getTodaySummary = cache(async (): Promise<TodaySummary> => {
-  const supabase = await createClient();
+  const userId = await requireUserId();
   const { start, end } = localDayRangeUtc();
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("pages_read, seconds")
-    .gte("started_at", start.toISOString())
-    .lt("started_at", end.toISOString());
-  if (error) throw error;
+  const rows = await getDb()
+    .select({ pages_read: sessions.pages_read, seconds: sessions.seconds })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.user_id, userId),
+        gte(sessions.started_at, start.toISOString()),
+        lt(sessions.started_at, end.toISOString()),
+      ),
+    );
 
-  const sessions = data ?? [];
-  const pages = sessions.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
-  const seconds = sessions.reduce((sum, s) => sum + (s.seconds ?? 0), 0);
-  return { pages, minutes: Math.round(seconds / 60), sessionCount: sessions.length };
+  const pages = rows.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
+  const seconds = rows.reduce((sum, s) => sum + (s.seconds ?? 0), 0);
+  return { pages, minutes: Math.round(seconds / 60), sessionCount: rows.length };
 });
 
 export async function getStreakDays(): Promise<number> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
   const since = new Date(Date.now() - 400 * 86400000).toISOString();
-  const { data, error } = await supabase.from("sessions").select("started_at").gte("started_at", since);
-  if (error) throw error;
+  const rows = await getDb()
+    .select({ started_at: sessions.started_at })
+    .from(sessions)
+    .where(and(eq(sessions.user_id, userId), gte(sessions.started_at, since)));
 
-  const keys = new Set((data ?? []).map((s) => localDateKey(s.started_at)));
+  const keys = new Set(rows.map((s) => localDateKey(s.started_at)));
   return computeStreak(keys);
 }

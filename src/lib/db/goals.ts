@@ -1,7 +1,11 @@
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/db";
+import { goals, sessions } from "@/db/schema";
 import { DEFAULT_DAILY_PAGES_GOAL, computeDeadlineNorm, type DeadlineComputation } from "@/lib/goals";
+import { requireUserId } from "@/lib/require-user";
 import { localDateKey, localDayRangeUtc } from "@/lib/time";
+import { assertOwnReading } from "./query";
 
 const DAILY_PAGES_RANGE = { min: 1, max: 500 };
 
@@ -9,34 +13,39 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+/** Своя дневная цель. */
+function ownDailyGoal(userId: string) {
+  return and(eq(goals.user_id, userId), eq(goals.kind, "daily"));
+}
+
+/** Свой дедлайн прочтения. */
+function ownDeadlineGoal(userId: string, readingId: string) {
+  return and(eq(goals.user_id, userId), eq(goals.kind, "deadline"), eq(goals.reading_id, readingId));
+}
+
 /** cache(): несколько компонентов одного запроса (layout, Sidebar, сама страница) читают дневную цель один раз. */
 export const getDailyPagesGoal = cache(async (): Promise<number> => {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("goals")
-    .select("target_value")
-    .eq("kind", "daily")
-    .maybeSingle();
-  if (error) throw error;
-  return data?.target_value ?? DEFAULT_DAILY_PAGES_GOAL;
+  const userId = await requireUserId();
+  const [goal] = await getDb()
+    .select({ target_value: goals.target_value })
+    .from(goals)
+    .where(ownDailyGoal(userId));
+  return goal?.target_value ?? DEFAULT_DAILY_PAGES_GOAL;
 });
 
 export async function setDailyPagesGoal(value: number): Promise<number> {
   const clamped = clamp(value, DAILY_PAGES_RANGE.min, DAILY_PAGES_RANGE.max);
-  const supabase = await createClient();
-  const { data: existing, error: selectError } = await supabase
-    .from("goals")
-    .select("id")
-    .eq("kind", "daily")
-    .maybeSingle();
-  if (selectError) throw selectError;
+  const userId = await requireUserId();
+  const db = getDb();
+  const [existing] = await db.select({ id: goals.id }).from(goals).where(ownDailyGoal(userId));
 
   if (existing) {
-    const { error } = await supabase.from("goals").update({ target_value: clamped }).eq("id", existing.id);
-    if (error) throw error;
+    await db
+      .update(goals)
+      .set({ target_value: clamped })
+      .where(and(eq(goals.id, existing.id), eq(goals.user_id, userId)));
   } else {
-    const { error } = await supabase.from("goals").insert({ kind: "daily", target_value: clamped });
-    if (error) throw error;
+    await db.insert(goals).values({ user_id: userId, kind: "daily", target_value: clamped });
   }
   return clamped;
 }
@@ -44,75 +53,76 @@ export async function setDailyPagesGoal(value: number): Promise<number> {
 export type DeadlineGoal = { dueDate: string; skipWeekdays: number[] };
 
 export async function getDeadlineGoal(readingId: string): Promise<DeadlineGoal | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("goals")
-    .select("due_date, skip_weekdays")
-    .eq("kind", "deadline")
-    .eq("reading_id", readingId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data?.due_date) return null;
-  return { dueDate: data.due_date, skipWeekdays: data.skip_weekdays ?? [] };
+  const userId = await requireUserId();
+  const [goal] = await getDb()
+    .select({ due_date: goals.due_date, skip_weekdays: goals.skip_weekdays })
+    .from(goals)
+    .where(ownDeadlineGoal(userId, readingId));
+  if (!goal?.due_date) return null;
+  return { dueDate: goal.due_date, skipWeekdays: goal.skip_weekdays };
 }
 
 export async function saveDeadlineGoal(readingId: string, dueDate: string, skipWeekdays: number[]): Promise<void> {
-  const supabase = await createClient();
-  const { data: existing, error: selectError } = await supabase
-    .from("goals")
-    .select("id")
-    .eq("kind", "deadline")
-    .eq("reading_id", readingId)
-    .maybeSingle();
-  if (selectError) throw selectError;
+  const userId = await requireUserId();
+  const db = getDb();
+  const [existing] = await db.select({ id: goals.id }).from(goals).where(ownDeadlineGoal(userId, readingId));
 
   if (existing) {
-    const { error } = await supabase
-      .from("goals")
-      .update({ due_date: dueDate, skip_weekdays: skipWeekdays })
-      .eq("id", existing.id);
-    if (error) throw error;
+    await db
+      .update(goals)
+      .set({ due_date: dueDate, skip_weekdays: skipWeekdays })
+      .where(and(eq(goals.id, existing.id), eq(goals.user_id, userId)));
   } else {
-    const { error } = await supabase
-      .from("goals")
-      .insert({ kind: "deadline", reading_id: readingId, due_date: dueDate, skip_weekdays: skipWeekdays });
-    if (error) throw error;
+    await assertOwnReading(userId, readingId);
+    await db.insert(goals).values({
+      user_id: userId,
+      kind: "deadline",
+      reading_id: readingId,
+      due_date: dueDate,
+      skip_weekdays: skipWeekdays,
+    });
   }
 }
 
 export async function deleteDeadlineGoal(readingId: string): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase.from("goals").delete().eq("kind", "deadline").eq("reading_id", readingId);
-  if (error) throw error;
+  const userId = await requireUserId();
+  await getDb().delete(goals).where(ownDeadlineGoal(userId, readingId));
 }
 
 /** page_to максимум среди сессий прочтения, начатых до начала сегодняшнего дня (локально). */
 async function getMaxPageBeforeToday(readingId: string): Promise<number> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
   const { start } = localDayRangeUtc();
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("page_to")
-    .eq("reading_id", readingId)
-    .lt("started_at", start.toISOString())
-    .order("page_to", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.page_to ?? 0;
+  const [session] = await getDb()
+    .select({ page_to: sessions.page_to })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.user_id, userId),
+        eq(sessions.reading_id, readingId),
+        lt(sessions.started_at, start.toISOString()),
+      ),
+    )
+    .orderBy(sql`${sessions.page_to} desc nulls last`)
+    .limit(1);
+  return session?.page_to ?? 0;
 }
 
 async function getPagesReadToday(readingId: string): Promise<number> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
   const { start, end } = localDayRangeUtc();
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("pages_read")
-    .eq("reading_id", readingId)
-    .gte("started_at", start.toISOString())
-    .lt("started_at", end.toISOString());
-  if (error) throw error;
-  return (data ?? []).reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
+  const rows = await getDb()
+    .select({ pages_read: sessions.pages_read })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.user_id, userId),
+        eq(sessions.reading_id, readingId),
+        gte(sessions.started_at, start.toISOString()),
+        lt(sessions.started_at, end.toISOString()),
+      ),
+    );
+  return rows.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
 }
 
 export type DeadlineCardData = DeadlineComputation & DeadlineGoal;
