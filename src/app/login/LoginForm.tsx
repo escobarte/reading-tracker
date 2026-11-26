@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
+import { formatTemplate } from "@/i18n/format";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { LOGIN_WINDOW_MINUTES } from "@/lib/config";
 import { GoogleButton } from "./GoogleButton";
 import { login, signInWithGoogle, type LoginState } from "./actions";
 
-export function LoginForm({ googleError }: { googleError: boolean }) {
+export function LoginForm({ googleEnabled, googleError }: { googleEnabled: boolean; googleError: boolean }) {
   const { t } = useLocale();
   const [state, formAction, pending] = useActionState<LoginState, FormData>(login, undefined);
   const [showPassword, setShowPassword] = useState(false);
@@ -30,19 +32,23 @@ export function LoginForm({ googleError }: { googleError: boolean }) {
       </div>
 
       <Card className="mt-6 flex flex-col gap-4 p-5 shadow-[var(--shadow-hero)] lg:p-6">
-        <form action={signInWithGoogle}>
-          <GoogleButton />
-        </form>
+        {googleEnabled && (
+          <>
+            <form action={signInWithGoogle}>
+              <GoogleButton />
+            </form>
 
-        {googleError && (
-          <p className="text-center font-serif text-sm text-deadline">{t.login.errorGoogle}</p>
+            {googleError && (
+              <p className="text-center font-serif text-sm text-deadline">{t.login.errorGoogle}</p>
+            )}
+
+            <div className="flex items-center gap-3">
+              <span aria-hidden="true" className="h-0 flex-1 border-t-[1.5px] border-dashed border-stitch" />
+              <span className="font-mono text-xs text-muted">{t.login.or}</span>
+              <span aria-hidden="true" className="h-0 flex-1 border-t-[1.5px] border-dashed border-stitch" />
+            </div>
+          </>
         )}
-
-        <div className="flex items-center gap-3">
-          <span aria-hidden="true" className="h-0 flex-1 border-t-[1.5px] border-dashed border-stitch" />
-          <span className="font-mono text-xs text-muted">{t.login.or}</span>
-          <span aria-hidden="true" className="h-0 flex-1 border-t-[1.5px] border-dashed border-stitch" />
-        </div>
 
         <form action={formAction} className="flex flex-col gap-4">
           <Input
@@ -83,7 +89,11 @@ export function LoginForm({ googleError }: { googleError: boolean }) {
           </Button>
 
           {state?.error && (
-            <p className="text-center font-serif text-sm text-deadline">{t.login.error}</p>
+            <p className="text-center font-serif text-sm text-deadline">
+              {state.error === "limit"
+                ? formatTemplate(t.login.errorLimit, { minutes: LOGIN_WINDOW_MINUTES })
+                : t.login.error}
+            </p>
           )}
         </form>
       </Card>

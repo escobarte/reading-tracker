@@ -494,6 +494,7 @@ const en: Dictionary = {
     submit: "Log in",
     submitPending: "Logging in…",
     error: "Incorrect email or password",
+    errorLimit: "Too many sign-in attempts. Wait {minutes} minutes and try again.",
     google: "Sign in with Google",
     googlePending: "Redirecting to Google…",
     or: "or",

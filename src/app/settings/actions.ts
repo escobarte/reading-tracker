@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/auth";
 import { setDailyPagesGoal } from "@/lib/db/goals";
 
+/** Выход с этого устройства: сессия удаляется из базы, cookie — из браузера. */
 export async function logout() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  const requestHeaders = await headers();
+  await getAuth().api.signOut({ headers: requestHeaders });
   redirect("/login");
 }
 

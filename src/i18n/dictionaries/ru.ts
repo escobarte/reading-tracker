@@ -412,6 +412,7 @@ const ru = {
     submit: "Войти",
     submitPending: "Входим…",
     error: "Неверный email или пароль",
+    errorLimit: "Слишком много попыток входа. Подождите {minutes} минут и попробуйте снова.",
     google: "Войти через Google",
     googlePending: "Переходим в Google…",
     or: "или",

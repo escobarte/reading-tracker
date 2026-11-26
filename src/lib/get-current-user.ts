@@ -1,26 +1,28 @@
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { cookies, headers } from "next/headers";
+import { getAuth, isAllowedEmail, LOGIN_METHOD_COOKIE } from "@/lib/auth";
 
 export type AuthProvider = "google" | "email";
 
 export type CurrentUser = {
   id: string;
   email: string | null;
-  /** Способ входа по `app_metadata.provider` из JWT — для экрана настроек ("вход через Google"/"по паролю"). */
-  provider: AuthProvider | null;
+  /** Способ последнего входа — для экрана настроек ("вход через Google"/"по паролю"). */
+  provider: AuthProvider;
 };
 
-/** cache(): если за один запрос текущего пользователя спрашивают несколько компонентов, JWT проверяется один раз. */
+/** cache(): если за один запрос текущего пользователя спрашивают несколько компонентов, сессия проверяется один раз. */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
+  const requestHeaders = await headers();
 
-  if (error || !data?.claims) {
+  // disableRefresh: сессию продлевает только proxy — серверные компоненты не могут записать cookie.
+  const result = await getAuth().api.getSession({ headers: requestHeaders, query: { disableRefresh: true } });
+
+  if (!result || !isAllowedEmail(result.user.email)) {
     return null;
   }
 
-  const claims = data.claims as { sub: string; email?: string; app_metadata?: { provider?: string } };
-  const rawProvider = claims.app_metadata?.provider;
-  const provider: AuthProvider | null = rawProvider === "google" ? "google" : rawProvider === "email" ? "email" : null;
-  return { id: claims.sub, email: claims.email ?? null, provider };
+  const method = (await cookies()).get(LOGIN_METHOD_COOKIE)?.value;
+  const provider: AuthProvider = method === "google" ? "google" : "email";
+  return { id: result.user.id, email: result.user.email, provider };
 });
