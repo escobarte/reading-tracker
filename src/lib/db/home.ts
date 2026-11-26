@@ -1,7 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { books, readings, sessions } from "@/db/schema";
 import { getDailyPagesGoal, getDeadlineForReading } from "@/lib/db/goals";
 import type { DeadlineCardData } from "@/lib/db/goals";
 import { getQuoteOfDay, type NoteWithBook } from "@/lib/db/notes";
+import { requireUserId } from "@/lib/require-user";
 import { localDateKey, localWeekRangeUtc } from "@/lib/time";
 import { getYearPlan, type YearPlan } from "./books";
 import { getStreakDays, getTodaySummary } from "./sessions";
@@ -59,35 +62,34 @@ export type HomeData = {
 };
 
 async function fetchReadingSection(): Promise<HomeReadingBook[]> {
-  const supabase = await createClient();
-  const { data: books, error: booksError } = await supabase
-    .from("books")
-    .select("*")
-    .eq("shelf", "reading");
-  if (booksError) throw booksError;
-  if (!books || books.length === 0) return [];
+  const userId = await requireUserId();
+  const db = getDb();
+  const readingBooks = await db
+    .select()
+    .from(books)
+    .where(and(eq(books.user_id, userId), eq(books.shelf, "reading")));
+  if (readingBooks.length === 0) return [];
 
-  const bookIds = books.map((b) => b.id);
-  const { data: openReadings, error: readingsError } = await supabase
-    .from("readings")
-    .select("id, book_id, started_at")
-    .in("book_id", bookIds)
-    .is("finished_at", null);
-  if (readingsError) throw readingsError;
+  const bookIds = readingBooks.map((b) => b.id);
+  const openReadings = await db
+    .select({ id: readings.id, book_id: readings.book_id, started_at: readings.started_at })
+    .from(readings)
+    .where(
+      and(eq(readings.user_id, userId), inArray(readings.book_id, bookIds), isNull(readings.finished_at)),
+    );
 
-  const readingIdToBookId = new Map((openReadings ?? []).map((r) => [r.id, r.book_id]));
-  const readingIdByBookId = new Map((openReadings ?? []).map((r) => [r.book_id, r.id]));
-  const startedAtByBookId = new Map((openReadings ?? []).map((r) => [r.book_id, r.started_at ?? ""]));
-  const readingIds = (openReadings ?? []).map((r) => r.id);
+  const readingIdToBookId = new Map(openReadings.map((r) => [r.id, r.book_id]));
+  const readingIdByBookId = new Map(openReadings.map((r) => [r.book_id, r.id]));
+  const startedAtByBookId = new Map(openReadings.map((r) => [r.book_id, r.started_at ?? ""]));
+  const readingIds = openReadings.map((r) => r.id);
 
   const currentPageByBookId = new Map<string, number>();
   if (readingIds.length > 0) {
-    const { data: sessionRows, error: sessionsError } = await supabase
-      .from("sessions")
-      .select("reading_id, page_to")
-      .in("reading_id", readingIds);
-    if (sessionsError) throw sessionsError;
-    for (const row of sessionRows ?? []) {
+    const sessionRows = await db
+      .select({ reading_id: sessions.reading_id, page_to: sessions.page_to })
+      .from(sessions)
+      .where(and(eq(sessions.user_id, userId), inArray(sessions.reading_id, readingIds)));
+    for (const row of sessionRows) {
       if (row.page_to == null) continue;
       const bookId = readingIdToBookId.get(row.reading_id);
       if (!bookId) continue;
@@ -96,7 +98,7 @@ async function fetchReadingSection(): Promise<HomeReadingBook[]> {
     }
   }
 
-  return books
+  return readingBooks
     .slice()
     .sort((a, b) => (startedAtByBookId.get(b.id) ?? "").localeCompare(startedAtByBookId.get(a.id) ?? ""))
     .map((book) => {
@@ -132,15 +134,20 @@ async function fetchDeadlineSection(reading: HomeReadingBook[]): Promise<HomeDea
 }
 
 async function fetchQueueSection(): Promise<HomeQueueBook[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("books")
-    .select("id, title, author, cover_url, queue_position")
-    .eq("shelf", "want")
-    .order("queue_position", { ascending: true, nullsFirst: false })
+  const userId = await requireUserId();
+  const queue = await getDb()
+    .select({
+      id: books.id,
+      title: books.title,
+      author: books.author,
+      cover_url: books.cover_url,
+      queue_position: books.queue_position,
+    })
+    .from(books)
+    .where(and(eq(books.user_id, userId), eq(books.shelf, "want")))
+    .orderBy(sql`${books.queue_position} asc nulls last`)
     .limit(6);
-  if (error) throw error;
-  return (data ?? []).map((book) => ({
+  return queue.map((book) => ({
     id: book.id,
     title: book.title,
     author: book.author,
@@ -150,20 +157,24 @@ async function fetchQueueSection(): Promise<HomeQueueBook[]> {
 }
 
 async function fetchWeekSection(dailyGoal: number): Promise<HomeData["week"]> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
   const todayKey = localDateKey(new Date());
   const { start, end } = localWeekRangeUtc();
 
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("started_at, pages_read, seconds")
-    .gte("started_at", start.toISOString())
-    .lt("started_at", end.toISOString());
-  if (error) throw error;
+  const weekSessions = await getDb()
+    .select({ started_at: sessions.started_at, pages_read: sessions.pages_read, seconds: sessions.seconds })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.user_id, userId),
+        gte(sessions.started_at, start.toISOString()),
+        lt(sessions.started_at, end.toISOString()),
+      ),
+    );
 
   const pagesByDay = new Map<string, number>();
   let totalMinutes = 0;
-  for (const session of data ?? []) {
+  for (const session of weekSessions) {
     const key = localDateKey(session.started_at);
     pagesByDay.set(key, (pagesByDay.get(key) ?? 0) + (session.pages_read ?? 0));
     totalMinutes += Math.round((session.seconds ?? 0) / 60);
@@ -183,20 +194,19 @@ async function fetchWeekSection(dailyGoal: number): Promise<HomeData["week"]> {
 }
 
 async function fetchRecentSection(): Promise<HomeRecentBook[]> {
-  const supabase = await createClient();
-  const { data: readings, error: readingsError } = await supabase
-    .from("readings")
-    .select("book_id, finished_at, rating")
-    .not("finished_at", "is", null)
-    .eq("is_dropped", false)
-    .order("finished_at", { ascending: false })
+  const userId = await requireUserId();
+  const db = getDb();
+  const finished = await db
+    .select({ book_id: readings.book_id, finished_at: readings.finished_at, rating: readings.rating })
+    .from(readings)
+    .where(and(eq(readings.user_id, userId), isNotNull(readings.finished_at), eq(readings.is_dropped, false)))
+    .orderBy(desc(readings.finished_at))
     .limit(30);
-  if (readingsError) throw readingsError;
 
   const orderedBookIds: string[] = [];
   const ratingByBookId = new Map<string, number | null>();
   const seen = new Set<string>();
-  for (const reading of readings ?? []) {
+  for (const reading of finished) {
     if (seen.has(reading.book_id)) continue;
     seen.add(reading.book_id);
     orderedBookIds.push(reading.book_id);
@@ -205,13 +215,12 @@ async function fetchRecentSection(): Promise<HomeRecentBook[]> {
   }
   if (orderedBookIds.length === 0) return [];
 
-  const { data: books, error: booksError } = await supabase
-    .from("books")
-    .select("id, title, cover_url")
-    .in("id", orderedBookIds);
-  if (booksError) throw booksError;
+  const recentBooks = await db
+    .select({ id: books.id, title: books.title, cover_url: books.cover_url })
+    .from(books)
+    .where(and(eq(books.user_id, userId), inArray(books.id, orderedBookIds)));
 
-  const byId = new Map((books ?? []).map((book) => [book.id, book]));
+  const byId = new Map(recentBooks.map((book) => [book.id, book]));
   return orderedBookIds
     .map((id) => byId.get(id))
     .filter((book): book is NonNullable<typeof book> => Boolean(book))

@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+import { and, asc, eq, gte, inArray, isNotNull, lt } from "drizzle-orm";
+import { getDb } from "@/db";
+import { books, readings, sessions } from "@/db/schema";
 import { addDays, daysBetween } from "@/lib/goals";
 import { getDailyPagesGoal } from "@/lib/db/goals";
 import { getYearPlan, type YearPlan } from "@/lib/db/books";
@@ -16,7 +18,14 @@ import {
   type Period,
   type TimeOfDayBucket,
 } from "@/lib/stats";
-import { localDateKey, localDateTimeToUtc, localHour, localYear } from "@/lib/time";
+import { requireUserId } from "@/lib/require-user";
+import {
+  localDateKey,
+  localDateTimeToUtc,
+  localHour,
+  localTrailingDaysRangeUtc,
+  localYear,
+} from "@/lib/time";
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -69,32 +78,41 @@ export type StatsData = {
 
 /** Full `/stats` data for one period view: tiles, calendar, bars, time-of-day — one Promise.all, columns kept minimal. */
 export async function getStatsData(period: Period, anchor: string): Promise<StatsData> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
+  const db = getDb();
   const todayKey = localDateKey(new Date());
   const currentYear = localYear(new Date());
   const range = periodRange(period, anchor);
+  // Без диапазона (период «всё время») условия по датам не добавляются: and() пропускает undefined.
+  const bounds = range ? rangeBoundsUtc(range.startKey, range.endKey) : null;
 
-  let sessionsQuery = supabase.from("sessions").select("started_at, pages_read, seconds");
-  let readingsQuery = supabase
-    .from("readings")
-    .select("finished_at")
-    .not("finished_at", "is", null)
-    .eq("is_dropped", false);
-  if (range) {
-    const bounds = rangeBoundsUtc(range.startKey, range.endKey);
-    sessionsQuery = sessionsQuery.gte("started_at", bounds.gte).lt("started_at", bounds.lt);
-    readingsQuery = readingsQuery.gte("finished_at", bounds.gte).lt("finished_at", bounds.lt);
-  }
-
-  const [dailyGoal, yearPlan, streak, sessionsRes, readingsRes] = await Promise.all([
+  const [dailyGoal, yearPlan, streak, periodSessions, finishedReadings] = await Promise.all([
     getDailyPagesGoal(),
     getYearPlan(),
     getStreakDays(),
-    sessionsQuery,
-    readingsQuery,
+    db
+      .select({ started_at: sessions.started_at, pages_read: sessions.pages_read, seconds: sessions.seconds })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.user_id, userId),
+          bounds ? gte(sessions.started_at, bounds.gte) : undefined,
+          bounds ? lt(sessions.started_at, bounds.lt) : undefined,
+        ),
+      ),
+    db
+      .select({ finished_at: readings.finished_at })
+      .from(readings)
+      .where(
+        and(
+          eq(readings.user_id, userId),
+          isNotNull(readings.finished_at),
+          eq(readings.is_dropped, false),
+          bounds ? gte(readings.finished_at, bounds.gte) : undefined,
+          bounds ? lt(readings.finished_at, bounds.lt) : undefined,
+        ),
+      ),
   ]);
-  if (sessionsRes.error) throw sessionsRes.error;
-  if (readingsRes.error) throw readingsRes.error;
 
   const dailyPages = new Map<string, number>();
   let totalPages = 0;
@@ -104,7 +122,7 @@ export async function getStatsData(period: Period, anchor: string): Promise<Stat
   let pagesWithDuration = 0;
   const timeOfDayRows: { hour: number; minutes: number }[] = [];
 
-  for (const row of sessionsRes.data ?? []) {
+  for (const row of periodSessions) {
     const dateKey = localDateKey(row.started_at);
     const pages = row.pages_read ?? 0;
     const seconds = row.seconds ?? 0;
@@ -126,7 +144,7 @@ export async function getStatsData(period: Period, anchor: string): Promise<Stat
     speedPagesPerHour: durationSeconds > 0 ? Math.round((pagesWithDuration / durationSeconds) * 3600) : null,
     avgMinutes: sessionCount > 0 ? Math.round(minutes / sessionCount) : null,
     avgPages: sessionCount > 0 ? Math.round(totalPages / sessionCount) : null,
-    booksFinished: (readingsRes.data ?? []).length,
+    booksFinished: finishedReadings.length,
     streak,
   };
 
@@ -259,23 +277,6 @@ export async function getStatsData(period: Period, anchor: string): Promise<Stat
   };
 }
 
-type ClosedReadingRow = {
-  id: string;
-  started_at: string | null;
-  finished_at: string | null;
-  book_id: string;
-  rating: number | null;
-};
-
-type BookGenreRow = {
-  id: string;
-  title: string;
-  author: string | null;
-  cover_url: string | null;
-  total_pages: number | null;
-  genre: string | null;
-};
-
 export type YearSummaryData = {
   year: number;
   isCurrentYear: boolean;
@@ -308,7 +309,8 @@ export type YearSummaryData = {
 
 /** Full `/stats/year/[year]` data: one Promise.all for the year's sessions, closed readings (with book details), and the earliest session's year (for arrow bounds). */
 export async function getYearSummaryData(year: number): Promise<YearSummaryData> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
+  const db = getDb();
   const todayKey = localDateKey(new Date());
   const currentYear = localYear(new Date());
   const isCurrentYear = year === currentYear;
@@ -317,30 +319,60 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
   const effectiveEndKey = isCurrentYear ? todayKey : yearEndKey;
   const bounds = rangeBoundsUtc(yearStartKey, yearEndKey);
 
-  const [yearPlan, sessionsRes, readingsRes, minYearRes] = await Promise.all([
+  const [yearPlan, yearSessions, closedReadings, [firstSession]] = await Promise.all([
     isCurrentYear ? getYearPlan() : Promise.resolve(null),
-    supabase.from("sessions").select("started_at, pages_read, seconds").gte("started_at", bounds.gte).lt("started_at", bounds.lt),
-    supabase
-      .from("readings")
-      .select("id, started_at, finished_at, book_id, rating")
-      .not("finished_at", "is", null)
-      .eq("is_dropped", false)
-      .gte("finished_at", bounds.gte)
-      .lt("finished_at", bounds.lt),
-    supabase.from("sessions").select("started_at").order("started_at", { ascending: true }).limit(1).maybeSingle(),
+    db
+      .select({ started_at: sessions.started_at, pages_read: sessions.pages_read, seconds: sessions.seconds })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.user_id, userId),
+          gte(sessions.started_at, bounds.gte),
+          lt(sessions.started_at, bounds.lt),
+        ),
+      ),
+    db
+      .select({
+        id: readings.id,
+        started_at: readings.started_at,
+        finished_at: readings.finished_at,
+        book_id: readings.book_id,
+        rating: readings.rating,
+      })
+      .from(readings)
+      .where(
+        and(
+          eq(readings.user_id, userId),
+          isNotNull(readings.finished_at),
+          eq(readings.is_dropped, false),
+          gte(readings.finished_at, bounds.gte),
+          lt(readings.finished_at, bounds.lt),
+        ),
+      ),
+    db
+      .select({ started_at: sessions.started_at })
+      .from(sessions)
+      .where(eq(sessions.user_id, userId))
+      .orderBy(asc(sessions.started_at))
+      .limit(1),
   ]);
-  if (sessionsRes.error) throw sessionsRes.error;
-  if (readingsRes.error) throw readingsRes.error;
-  if (minYearRes.error) throw minYearRes.error;
 
-  const closedReadingRows = (readingsRes.data ?? []) as ClosedReadingRow[];
-  const bookIds = Array.from(new Set(closedReadingRows.map((r) => r.book_id)));
-  const booksByIdRes =
+  const bookIds = Array.from(new Set(closedReadings.map((r) => r.book_id)));
+  const closedBooks =
     bookIds.length > 0
-      ? await supabase.from("books").select("id, title, author, cover_url, total_pages, genre").in("id", bookIds)
-      : { data: [] as BookGenreRow[], error: null };
-  if (booksByIdRes.error) throw booksByIdRes.error;
-  const booksById = new Map((booksByIdRes.data ?? []).map((b) => [b.id, b as BookGenreRow]));
+      ? await db
+          .select({
+            id: books.id,
+            title: books.title,
+            author: books.author,
+            cover_url: books.cover_url,
+            total_pages: books.total_pages,
+            genre: books.genre,
+          })
+          .from(books)
+          .where(and(eq(books.user_id, userId), inArray(books.id, bookIds)))
+      : [];
+  const booksById = new Map(closedBooks.map((b) => [b.id, b]));
 
   const dailyPages = new Map<string, number>();
   let totalPages = 0;
@@ -351,7 +383,7 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
   let longestSessionMinutes = 0;
   let longestSessionKey: string | null = null;
 
-  for (const row of sessionsRes.data ?? []) {
+  for (const row of yearSessions) {
     const dateKey = localDateKey(row.started_at);
     const pages = row.pages_read ?? 0;
     const seconds = row.seconds ?? 0;
@@ -381,7 +413,6 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
   );
   const bestStreak = longestStreakInRange(dateKeysWithReading, yearStartKey, effectiveEndKey);
 
-  const closedReadings = closedReadingRows;
   const booksByMonth = Array(12).fill(0) as number[];
   let longestBook: YearSummaryData["longestBook"] = null;
   const genreInputs: (string | null | undefined)[] = [];
@@ -421,7 +452,7 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
     }
   }
 
-  const minYear = minYearRes.data?.started_at ? localYear(minYearRes.data.started_at) : currentYear;
+  const minYear = firstSession ? localYear(firstSession.started_at) : currentYear;
 
   return {
     year,
@@ -453,25 +484,30 @@ export async function getYearSummaryData(year: number): Promise<YearSummaryData>
 
 /** Genres already used by the owner's books, most common spelling first — for the genre field's suggestions. */
 export async function getGenreSuggestions(): Promise<string[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("books").select("genre").not("genre", "is", null);
-  if (error) throw error;
-  const { groups } = groupGenres((data ?? []).map((b) => b.genre));
+  const userId = await requireUserId();
+  const rows = await getDb()
+    .select({ genre: books.genre })
+    .from(books)
+    .where(and(eq(books.user_id, userId), isNotNull(books.genre)));
+  const { groups } = groupGenres(rows.map((b) => b.genre));
   return groups.map((g) => g.label);
 }
 
 /** Pages/day over the trailing 14 local days for a reading — for the book page's pace forecast. */
 export async function getRecentPace(readingId: string): Promise<number> {
-  const supabase = await createClient();
-  const { localTrailingDaysRangeUtc } = await import("@/lib/time");
+  const userId = await requireUserId();
   const { start, end } = localTrailingDaysRangeUtc(14);
-  const { data, error } = await supabase
-    .from("sessions")
-    .select("pages_read")
-    .eq("reading_id", readingId)
-    .gte("started_at", start.toISOString())
-    .lt("started_at", end.toISOString());
-  if (error) throw error;
-  const total = (data ?? []).reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
+  const rows = await getDb()
+    .select({ pages_read: sessions.pages_read })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.user_id, userId),
+        eq(sessions.reading_id, readingId),
+        gte(sessions.started_at, start.toISOString()),
+        lt(sessions.started_at, end.toISOString()),
+      ),
+    );
+  const total = rows.reduce((sum, s) => sum + (s.pages_read ?? 0), 0);
   return total / 14;
 }
