@@ -25,7 +25,6 @@ import { timestamptz } from "./timestamptz";
 // Базовая модель "user" из Better Auth. Имена свойств — как у Better Auth,
 // имена колонок — snake_case. id имеет тип uuid, поэтому в конфиге Better Auth
 // нужно `advanced: { database: { generateId: "uuid" } }`.
-// Таблицы session, account и verification добавляются на шаге «Вход».
 // Не путать: session — вход в приложение, sessions — сессии чтения.
 
 export const user = pgTable("user", {
@@ -40,6 +39,80 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+// Служебные колонки таблиц Better Auth (по умолчанию он пишет и читает даты как Date).
+const authDate = (name: string) => timestamp(name, { withTimezone: true });
+const createdAt = () => authDate("created_at").notNull().defaultNow();
+const updatedAt = () =>
+  authDate("updated_at")
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date());
+
+/** Открытые входы в приложение. */
+export const session = pgTable(
+  "session",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    token: text("token").notNull().unique(),
+    expiresAt: authDate("expires_at").notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "session_user_id_fkey",
+      columns: [t.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    index("session_user_id").on(t.userId),
+  ],
+);
+
+/** Способы входа пользователя: `credential` (хеш пароля) и `google`. */
+export const account = pgTable(
+  "account",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    accountId: text("account_id").notNull(),
+    password: text("password"),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: authDate("access_token_expires_at"),
+    refreshTokenExpiresAt: authDate("refresh_token_expires_at"),
+    scope: text("scope"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "account_user_id_fkey",
+      columns: [t.userId],
+      foreignColumns: [user.id],
+    }).onDelete("cascade"),
+    index("account_user_id").on(t.userId),
+  ],
+);
+
+/** Одноразовые значения входа, например состояние перехода к Google. */
+export const verification = pgTable(
+  "verification",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: authDate("expires_at").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("verification_identifier").on(t.identifier)],
+);
 
 const ownerId = () => uuid("user_id").notNull();
 
