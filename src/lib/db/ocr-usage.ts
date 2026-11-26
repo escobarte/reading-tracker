@@ -1,31 +1,29 @@
-import { createClient } from "@/lib/supabase/server";
+import { and, eq, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { ocrUsage } from "@/db/schema";
+import { requireUserId } from "@/lib/require-user";
 import { localDateKey } from "@/lib/time";
 
 /** Сколько раз пользователь уже вызывал распознавание сегодня (Europe/Bucharest). */
 export async function getOcrUsageToday(): Promise<number> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
   const day = localDateKey(new Date());
-  const { data, error } = await supabase.from("ocr_usage").select("count").eq("day", day).maybeSingle();
-  if (error) throw error;
-  return data?.count ?? 0;
+  const [row] = await getDb()
+    .select({ count: ocrUsage.count })
+    .from(ocrUsage)
+    .where(and(eq(ocrUsage.user_id, userId), eq(ocrUsage.day, day)));
+  return row?.count ?? 0;
 }
 
-/** Увеличивает счётчик за сегодня на 1. Вызывать только после успешного ответа Claude. */
+/** Увеличивает счётчик за сегодня на 1 одним запросом. Вызывать только после успешного ответа Claude. */
 export async function incrementOcrUsage(): Promise<void> {
-  const supabase = await createClient();
+  const userId = await requireUserId();
   const day = localDateKey(new Date());
-  const { data: existing, error: selectError } = await supabase
-    .from("ocr_usage")
-    .select("count")
-    .eq("day", day)
-    .maybeSingle();
-  if (selectError) throw selectError;
-
-  if (existing) {
-    const { error } = await supabase.from("ocr_usage").update({ count: existing.count + 1 }).eq("day", day);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from("ocr_usage").insert({ day, count: 1 });
-    if (error) throw error;
-  }
+  await getDb()
+    .insert(ocrUsage)
+    .values({ user_id: userId, day, count: 1 })
+    .onConflictDoUpdate({
+      target: [ocrUsage.user_id, ocrUsage.day],
+      set: { count: sql`${ocrUsage.count} + 1` },
+    });
 }

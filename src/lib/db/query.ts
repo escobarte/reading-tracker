@@ -1,7 +1,7 @@
 // Общие части запросов Drizzle.
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb, type Executor, type Transaction } from "@/db";
-import { books, readings } from "@/db/schema";
+import { books, notes, readings } from "@/db/schema";
 import { requireUserId } from "@/lib/require-user";
 import type { Reading } from "./types";
 
@@ -45,6 +45,15 @@ export async function assertOwnReading(db: Executor, userId: string, readingId: 
       .select({ id: readings.id })
       .from(readings)
       .where(and(eq(readings.id, readingId), eq(readings.user_id, userId))),
+  );
+}
+
+export async function assertOwnNote(db: Executor, userId: string, noteId: string): Promise<void> {
+  firstOrThrow(
+    await db
+      .select({ id: notes.id })
+      .from(notes)
+      .where(and(eq(notes.id, noteId), eq(notes.user_id, userId))),
   );
 }
 

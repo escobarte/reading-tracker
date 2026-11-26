@@ -1,4 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { getDb } from "@/db";
+import { books, goals, notes, readings, sessions, settings } from "@/db/schema";
+import { requireUserId } from "@/lib/require-user";
 import { getSignedPhotoUrls } from "./photos";
 import { getLatestReadingByBook } from "./readings";
 import type { Book, Goal, Note, Reading, ReadingSession, UserSettings } from "./types";
@@ -16,32 +19,27 @@ export type FullExportData = {
 
 /** Полный снимок данных пользователя для /api/export/json. Без ocr_usage и без подписанных ссылок на фото. */
 export async function getFullExportData(): Promise<FullExportData> {
-  const supabase = await createClient();
-  const [booksRes, readingsRes, sessionsRes, notesRes, goalsRes, settingsRes] = await Promise.all([
-    supabase.from("books").select("*").order("created_at", { ascending: true }),
-    supabase.from("readings").select("*").order("created_at", { ascending: true }),
-    supabase.from("sessions").select("*").order("started_at", { ascending: true }),
-    supabase.from("notes").select("*").order("created_at", { ascending: true }),
-    supabase.from("goals").select("*").order("created_at", { ascending: true }),
-    supabase.from("settings").select("*").maybeSingle(),
+  const userId = await requireUserId();
+  const db = getDb();
+  const [allBooks, allReadings, allSessions, allNotes, allGoals, [userSettings]] = await Promise.all([
+    db.select().from(books).where(eq(books.user_id, userId)).orderBy(asc(books.created_at)),
+    db.select().from(readings).where(eq(readings.user_id, userId)).orderBy(asc(readings.created_at)),
+    db.select().from(sessions).where(eq(sessions.user_id, userId)).orderBy(asc(sessions.started_at)),
+    db.select().from(notes).where(eq(notes.user_id, userId)).orderBy(asc(notes.created_at)),
+    db.select().from(goals).where(eq(goals.user_id, userId)).orderBy(asc(goals.created_at)),
+    db.select().from(settings).where(eq(settings.user_id, userId)),
   ]);
-
-  if (booksRes.error) throw booksRes.error;
-  if (readingsRes.error) throw readingsRes.error;
-  if (sessionsRes.error) throw sessionsRes.error;
-  if (notesRes.error) throw notesRes.error;
-  if (goalsRes.error) throw goalsRes.error;
-  if (settingsRes.error) throw settingsRes.error;
 
   return {
     version: 1,
     exported_at: new Date().toISOString(),
-    books: booksRes.data ?? [],
-    readings: readingsRes.data ?? [],
-    sessions: sessionsRes.data ?? [],
-    notes: notesRes.data ?? [],
-    goals: goalsRes.data ?? [],
-    settings: settingsRes.data ?? null,
+    books: allBooks,
+    readings: allReadings,
+    sessions: allSessions,
+    // type и kind в базе допускают NULL, но приложение всегда их заполняет.
+    notes: allNotes as Note[],
+    goals: allGoals as Goal[],
+    settings: userSettings ?? null,
   };
 }
 
@@ -49,11 +47,13 @@ export type BookExportRow = { book: Book; reading: Reading | null };
 
 /** Каждая книга со своим последним прочтением (даты, оценка, отзыв, итог, причина) — одна строка на книгу для books.csv. */
 export async function getBooksForCsv(): Promise<BookExportRow[]> {
-  const supabase = await createClient();
-  const { data: books, error } = await supabase.from("books").select("*").order("created_at", { ascending: true });
-  if (error) throw error;
+  const userId = await requireUserId();
+  const allBooks = await getDb()
+    .select()
+    .from(books)
+    .where(eq(books.user_id, userId))
+    .orderBy(asc(books.created_at));
 
-  const allBooks = books ?? [];
   const latestByBook = await getLatestReadingByBook(allBooks.map((b) => b.id));
   return allBooks.map((book) => ({ book, reading: latestByBook.get(book.id) ?? null }));
 }
@@ -62,28 +62,28 @@ export type SessionExportRow = { session: ReadingSession; bookTitle: string };
 
 /** Каждая сессия с названием книги (через reading_id) — одна строка на сессию для sessions.csv. */
 export async function getSessionsForCsv(): Promise<SessionExportRow[]> {
-  const supabase = await createClient();
-  const { data: sessions, error } = await supabase
-    .from("sessions")
-    .select("*")
-    .order("started_at", { ascending: true });
-  if (error) throw error;
-
-  const allSessions = sessions ?? [];
+  const userId = await requireUserId();
+  const db = getDb();
+  const allSessions = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.user_id, userId))
+    .orderBy(asc(sessions.started_at));
   if (allSessions.length === 0) return [];
 
   const readingIds = [...new Set(allSessions.map((s) => s.reading_id))];
-  const { data: readings, error: readingsError } = await supabase
-    .from("readings")
-    .select("id, book_id")
-    .in("id", readingIds);
-  if (readingsError) throw readingsError;
-  const bookIdByReading = new Map((readings ?? []).map((r) => [r.id, r.book_id]));
+  const sessionReadings = await db
+    .select({ id: readings.id, book_id: readings.book_id })
+    .from(readings)
+    .where(and(eq(readings.user_id, userId), inArray(readings.id, readingIds)));
+  const bookIdByReading = new Map(sessionReadings.map((r) => [r.id, r.book_id]));
 
   const bookIds = [...new Set([...bookIdByReading.values()])];
-  const { data: books, error: booksError } = await supabase.from("books").select("id, title").in("id", bookIds);
-  if (booksError) throw booksError;
-  const titleByBook = new Map((books ?? []).map((b) => [b.id, b.title]));
+  const sessionBooks = await db
+    .select({ id: books.id, title: books.title })
+    .from(books)
+    .where(and(eq(books.user_id, userId), inArray(books.id, bookIds)));
+  const titleByBook = new Map(sessionBooks.map((b) => [b.id, b.title]));
 
   return allSessions.map((session) => {
     const bookId = bookIdByReading.get(session.reading_id);
@@ -95,11 +95,12 @@ export type NotePhotoRef = { noteId: string; url: string };
 
 /** Подписанные ссылки (1 час) на все фото заметок пользователя — для сборки полного бэкапа в браузере. */
 export async function listNotePhotosForExport(): Promise<NotePhotoRef[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("notes").select("id, photo_path").not("photo_path", "is", null);
-  if (error) throw error;
+  const userId = await requireUserId();
+  const rows = await getDb()
+    .select({ id: notes.id, photo_path: notes.photo_path })
+    .from(notes)
+    .where(and(eq(notes.user_id, userId), isNotNull(notes.photo_path)));
 
-  const rows = data ?? [];
   const paths = rows.map((row) => row.photo_path as string);
   const urls = await getSignedPhotoUrls(paths);
 
