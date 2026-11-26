@@ -45,6 +45,13 @@ export function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+/** Фото для Server Action: файл в FormData. */
+export function photoFormData(blob: Blob): FormData {
+  const form = new FormData();
+  form.append("photo", blob, "photo.jpg");
+  return form;
+}
+
 export type CompressedImage = { blob: Blob; base64: string; mimeType: "image/jpeg" };
 
 /**

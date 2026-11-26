@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { books, goals, notes, readings, sessions, settings } from "@/db/schema";
 import { requireUserId } from "@/lib/require-user";
-import { getSignedPhotoUrls } from "./photos";
+import { notePhotoUrl } from "./photos";
 import { getLatestReadingByBook } from "./readings";
 import type { Book, Goal, Note, Reading, ReadingSession, UserSettings } from "./types";
 
@@ -93,21 +93,16 @@ export async function getSessionsForCsv(): Promise<SessionExportRow[]> {
 
 export type NotePhotoRef = { noteId: string; url: string };
 
-/** Подписанные ссылки (1 час) на все фото заметок пользователя — для сборки полного бэкапа в браузере. */
+/**
+ * Адреса всех фото заметок пользователя — для сборки полного бэкапа в браузере.
+ * Если файла нет на диске, адрес ответит 404, и бэкап назовёт заметку среди пропущенных.
+ */
 export async function listNotePhotosForExport(): Promise<NotePhotoRef[]> {
   const userId = await requireUserId();
   const rows = await getDb()
-    .select({ id: notes.id, photo_path: notes.photo_path })
+    .select({ id: notes.id })
     .from(notes)
     .where(and(eq(notes.user_id, userId), isNotNull(notes.photo_path)));
 
-  const paths = rows.map((row) => row.photo_path as string);
-  const urls = await getSignedPhotoUrls(paths);
-
-  const refs: NotePhotoRef[] = [];
-  for (const row of rows) {
-    const url = urls.get(row.photo_path as string);
-    if (url) refs.push({ noteId: row.id, url });
-  }
-  return refs;
+  return rows.map((row) => ({ noteId: row.id, url: notePhotoUrl(row.id) }));
 }

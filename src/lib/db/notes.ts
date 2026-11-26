@@ -6,7 +6,7 @@ import { groupGenres } from "@/lib/stats";
 import { NO_BOOK_ID, pickQuoteOfDay } from "@/lib/notes";
 import { requireUserId } from "@/lib/require-user";
 import { localDateKey } from "@/lib/time";
-import { deleteNotePhoto, getSignedPhotoUrls, notePhotoPath, uploadNotePhoto } from "./photos";
+import { deleteNotePhoto, notePhotoPath, readNotePhoto, versionedPhotoUrl, writeNotePhoto } from "./photos";
 import { assertOwnBook, assertOwnNote, firstOrThrow } from "./query";
 import type { BookShelf, Note, NoteType } from "./types";
 
@@ -23,12 +23,15 @@ function toNote(row: typeof notes.$inferSelect): Note {
   return row as Note;
 }
 
-async function attachPhotoUrls<T extends { photo_path: string | null }>(
+async function attachPhotoUrls<T extends { id: string; photo_path: string | null }>(
   notes: T[],
 ): Promise<(T & { photoUrl: string | null })[]> {
-  const paths = notes.map((n) => n.photo_path).filter((p): p is string => Boolean(p));
-  const urls = await getSignedPhotoUrls(paths);
-  return notes.map((note) => ({ ...note, photoUrl: note.photo_path ? (urls.get(note.photo_path) ?? null) : null }));
+  return Promise.all(
+    notes.map(async (note) => ({
+      ...note,
+      photoUrl: note.photo_path ? await versionedPhotoUrl(note.id, note.photo_path) : null,
+    })),
+  );
 }
 
 export type NoteFilters = {
@@ -190,7 +193,7 @@ async function setPhotoPath(noteId: string, path: string | null): Promise<Note> 
 async function attachNewPhoto(noteId: string, userId: string, photoBytes: Uint8Array): Promise<Note> {
   const path = notePhotoPath(userId, noteId);
   try {
-    await uploadNotePhoto(path, photoBytes);
+    await writeNotePhoto(path, photoBytes);
   } catch (uploadError) {
     await deleteNote(noteId);
     throw uploadError;
@@ -198,7 +201,7 @@ async function attachNewPhoto(noteId: string, userId: string, photoBytes: Uint8A
   return setPhotoPath(noteId, path);
 }
 
-/** Создаёт заметку типа `photo` без текста («Сохранить как фото») и сразу загружает фото в Storage. */
+/** Создаёт заметку типа `photo` без текста («Сохранить как фото») и сразу сохраняет фото. */
 export async function createPhotoNote(input: {
   userId: string;
   book_id: string;
@@ -239,12 +242,12 @@ export async function createNoteWithPhoto(input: {
   return attachNewPhoto(note.id, input.userId, input.photoBytes);
 }
 
-/** «Заменить» в правке заметки: перезаписывает объект в Storage по тому же пути. */
+/** «Заменить» в правке заметки: перезаписывает файл по тому же пути. */
 export async function replaceNotePhoto(userId: string, noteId: string, photoBytes: Uint8Array): Promise<string> {
   // Владелец проверяется до загрузки, чтобы для чужой или удалённой заметки не появлялся файл.
   await assertOwnNote(getDb(), await requireUserId(), noteId);
   const path = notePhotoPath(userId, noteId);
-  await uploadNotePhoto(path, photoBytes);
+  await writeNotePhoto(path, photoBytes);
   await setPhotoPath(noteId, path);
   return path;
 }
@@ -259,7 +262,7 @@ async function findPhotoPath(noteId: string): Promise<string | null> {
   return note?.photo_path ?? null;
 }
 
-/** «Удалить фото» в правке заметки: убирает файл из Storage и ссылку в заметке. */
+/** «Удалить фото» в правке заметки: убирает файл и ссылку в заметке. */
 export async function removeNotePhoto(noteId: string): Promise<void> {
   const path = await findPhotoPath(noteId);
   if (!path) return;
@@ -270,9 +273,13 @@ export async function removeNotePhoto(noteId: string): Promise<void> {
 
 export async function getNotePhotoUrl(noteId: string): Promise<string | null> {
   const path = await findPhotoPath(noteId);
-  if (!path) return null;
-  const urls = await getSignedPhotoUrls([path]);
-  return urls.get(path) ?? null;
+  return path ? versionedPhotoUrl(noteId, path) : null;
+}
+
+/** Содержимое фото своей заметки или `null`: нет заметки, она чужая, без фото или файл пропал. */
+export async function getNotePhotoFile(noteId: string): Promise<Buffer<ArrayBuffer> | null> {
+  const path = await findPhotoPath(noteId);
+  return path ? readNotePhoto(path) : null;
 }
 
 export async function setNoteFavorite(id: string, favorite: boolean): Promise<void> {

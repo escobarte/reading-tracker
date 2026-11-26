@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { base64ToBytes } from "@/lib/base64";
 import {
   createNote,
   createNoteWithPhoto,
@@ -79,13 +78,23 @@ export async function toggleNoteFavoriteAction(id: string, favorite: boolean, bo
   revalidateNotePaths(bookId);
 }
 
+/**
+ * Фото приходит файлом в FormData (поле `photo`), а не base64-строкой: строку длиннее миллиона
+ * знаков React в аргументах Server Action отклоняет. Тип и размер проверяются при записи на диск.
+ */
+async function photoBytesFrom(form: FormData): Promise<Uint8Array> {
+  const photo = form.get("photo");
+  if (!(photo instanceof Blob)) throw new Error("Photo is missing");
+  return new Uint8Array(await photo.arrayBuffer());
+}
+
 export type SavePhotoNoteResult = { ok: true; note: Note } | { ok: false; error: "unauthorized" | "failed" };
 
 /** «Сохранить как фото»: заметка типа `photo` без текста. */
 export async function createPhotoNoteAction(
   bookId: string,
   page: number | null,
-  photoBase64: string,
+  photo: FormData,
 ): Promise<SavePhotoNoteResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "unauthorized" };
@@ -95,7 +104,7 @@ export async function createPhotoNoteAction(
       userId: user.id,
       book_id: bookId,
       page,
-      photoBytes: base64ToBytes(photoBase64),
+      photoBytes: await photoBytesFrom(photo),
     });
     revalidateNotePaths(bookId);
     return { ok: true, note };
@@ -110,7 +119,7 @@ export async function createNoteWithPhotoAction(
   type: NoteType,
   body: string,
   page: number | null,
-  photoBase64: string,
+  photo: FormData,
 ): Promise<SavePhotoNoteResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "unauthorized" };
@@ -124,7 +133,7 @@ export async function createNoteWithPhotoAction(
       type,
       body,
       page,
-      photoBytes: base64ToBytes(photoBase64),
+      photoBytes: await photoBytesFrom(photo),
     });
     revalidateNotePaths(bookId);
     return { ok: true, note };
@@ -139,12 +148,12 @@ export type PhotoActionResult = { ok: true } | { ok: false };
 export async function replaceNotePhotoAction(
   noteId: string,
   bookId: string | null,
-  photoBase64: string,
+  photo: FormData,
 ): Promise<PhotoActionResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false };
   try {
-    await replaceNotePhoto(user.id, noteId, base64ToBytes(photoBase64));
+    await replaceNotePhoto(user.id, noteId, await photoBytesFrom(photo));
     revalidateNotePaths(bookId);
     return { ok: true };
   } catch {
@@ -163,7 +172,7 @@ export async function removeNotePhotoAction(noteId: string, bookId: string | nul
   }
 }
 
-/** Свежая подписанная ссылка на фото заметки (после «Заменить», когда прежняя могла устареть). */
+/** Новый адрес фото заметки: после «Заменить» у него другая версия. */
 export async function getNotePhotoUrlAction(noteId: string): Promise<string | null> {
   return getNotePhotoUrl(noteId);
 }

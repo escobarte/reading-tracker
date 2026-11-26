@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# фото заметок, если PHOTOS_DIR внутри проекта
+/data/

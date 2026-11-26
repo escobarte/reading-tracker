@@ -9,7 +9,7 @@ import { Stepper } from "@/components/ui/Stepper";
 import { TagInput } from "./TagInput";
 import { PhotoThumbnail } from "./PhotoThumbnail";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { bitmapFromFile, compressImage } from "@/lib/image";
+import { bitmapFromFile, compressImage, photoFormData } from "@/lib/image";
 import { NO_BOOK_ID } from "@/lib/notes";
 import {
   createNoteAction,
@@ -185,8 +185,8 @@ export function NoteEditorDialog({ open, onClose, trigger, onSaved, onDeleted, o
     let bitmap: ImageBitmap | null = null;
     try {
       bitmap = await bitmapFromFile(file);
-      const { base64 } = await compressImage(bitmap, null, { maxDim: 1600, quality: 0.85 });
-      const result = await replaceNotePhotoAction(trigger.note.id, trigger.note.book_id, base64);
+      const { blob } = await compressImage(bitmap, null, { maxDim: 1600, quality: 0.85 });
+      const result = await replaceNotePhotoAction(trigger.note.id, trigger.note.book_id, photoFormData(blob));
       if (!result.ok) {
         setError(t.photoResult.errorGeneric);
         return;

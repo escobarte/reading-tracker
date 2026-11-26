@@ -137,7 +137,8 @@ function BackupZipButton() {
         const photo = photos[i];
         try {
           const photoRes = await fetch(photo.url, { cache: "no-store" });
-          if (!photoRes.ok) throw new Error();
+          // Проверка типа: без входа вместо фото может прийти страница входа с кодом 200.
+          if (!photoRes.ok || photoRes.headers.get("Content-Type") !== "image/jpeg") throw new Error();
           const bytes = new Uint8Array(await photoRes.arrayBuffer());
           zip.addFile(`photos/${photo.noteId}.jpg`, bytes);
         } catch {

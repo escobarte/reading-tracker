@@ -18,7 +18,7 @@ type NoteCardProps = {
   isFavorite: boolean;
   favoriteLabel: string;
   tags: string[];
-  /** Есть ли у заметки фото (`photo_path` в базе) — не путать с `photoUrl`, который может быть `null`, если подписанная ссылка не получена. */
+  /** Есть ли у заметки фото (`photo_path` в базе) — не путать с `photoUrl`, который равен `null`, если файла фото нет. */
   hasPhoto: boolean;
   photoUrl: string | null;
   photoNoTextLabel: string;

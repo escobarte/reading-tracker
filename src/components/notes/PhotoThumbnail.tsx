@@ -20,10 +20,11 @@ type PhotoThumbnailProps = {
 };
 
 export function PhotoThumbnail({ src, seed, alt, size = "card" }: PhotoThumbnailProps) {
-  const [broken, setBroken] = useState(false);
+  // Запоминается сам адрес: после замены фото новый адрес загружается заново.
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   const rotate = size === "card" ? thumbnailRotation(seed) : 0;
   const dims = size === "card" ? { w: 56, h: 74 } : size === "result" ? { w: 96, h: 128 } : null;
-  const showImage = Boolean(src) && !broken;
+  const showImage = Boolean(src) && src !== brokenSrc;
 
   return (
     <div
@@ -39,7 +40,7 @@ export function PhotoThumbnail({ src, seed, alt, size = "card" }: PhotoThumbnail
           sizes={dims ? `${dims.w}px` : "320px"}
           className="object-cover"
           draggable={false}
-          onError={() => setBroken(true)}
+          onError={() => setBrokenSrc(src)}
         />
       ) : (
         <PhotoPlaceholderLines />

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { listNotePhotosForExport } from "@/lib/db/export";
 
-/** Список подписанных ссылок (1 час) на фото заметок владельца — клиент скачивает их по очереди для ZIP. */
+/** Список адресов фото заметок владельца — клиент скачивает их по очереди для ZIP. */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {

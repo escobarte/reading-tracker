@@ -6,8 +6,12 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "books.google.com" },
       { protocol: "https", hostname: "books.googleusercontent.com" },
       { protocol: "https", hostname: "covers.openlibrary.org" },
-      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/sign/**" },
     ],
+  },
+  experimental: {
+    // Фото заметки (до 5 МБ, NOTE_PHOTO_MAX_BYTES) уходит в Server Action файлом; по умолчанию лимит 1 МБ.
+    // Держать ниже proxyClientMaxBodySize (10 МБ), иначе proxy обрежет тело.
+    serverActions: { bodySizeLimit: "6mb" },
   },
   turbopack: {
     rules: {

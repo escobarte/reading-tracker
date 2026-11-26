@@ -6,14 +6,14 @@ import { PhotoCaptureStep } from "@/components/notes/photo/PhotoCaptureStep";
 import { PhotoSelectStep } from "@/components/notes/photo/PhotoSelectStep";
 import { PhotoResultStep, type PhotoResultError } from "@/components/notes/photo/PhotoResultStep";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { bitmapFromFile, compressImage, type NormalizedRect } from "@/lib/image";
+import { bitmapFromFile, compressImage, photoFormData, type NormalizedRect } from "@/lib/image";
 import { createNoteWithPhotoAction, createPhotoNoteAction } from "@/app/notes/actions";
 import type { Book, NoteType } from "@/lib/db/types";
 
 type Step = "capture" | "select" | "result";
 
 type CapturedPhoto = { bitmap: ImageBitmap; displayUrl: string };
-type ResultPhoto = { fullBase64: string; previewUrl: string; cropBase64: string };
+type ResultPhoto = { fullBlob: Blob; previewUrl: string; cropBase64: string };
 
 const DEFAULT_RECT: NormalizedRect = { left: 0.1, top: 0.35, right: 0.9, bottom: 0.65 };
 
@@ -81,7 +81,7 @@ export function PhotoNoteWizard({ book, currentPage }: { book: Book; currentPage
     setWizardError(null);
     try {
       const full = await compressImage(photo.bitmap, null, { maxDim: 1600, quality: 0.85 });
-      const result = await createPhotoNoteAction(book.id, currentPage, full.base64);
+      const result = await createPhotoNoteAction(book.id, currentPage, photoFormData(full.blob));
       if (!result.ok) {
         setWizardError(t.photoResult.errorGeneric);
         return;
@@ -131,7 +131,7 @@ export function PhotoNoteWizard({ book, currentPage }: { book: Book; currentPage
       const crop = await compressImage(photo.bitmap, rect, { maxDim: 1600, quality: 0.85, maxBytes: 1_000_000 });
       setResultPhoto((prev) => {
         if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
-        return { fullBase64: full.base64, previewUrl: URL.createObjectURL(full.blob), cropBase64: crop.base64 };
+        return { fullBlob: full.blob, previewUrl: URL.createObjectURL(full.blob), cropBase64: crop.base64 };
       });
       setNoteType("quote");
       setBody("");
@@ -153,7 +153,8 @@ export function PhotoNoteWizard({ book, currentPage }: { book: Book; currentPage
     if (!resultPhoto || saving || recognizing) return;
     setSaving(true);
     try {
-      const result = await createNoteWithPhotoAction(book.id, noteType, body, page, resultPhoto.fullBase64);
+      const form = photoFormData(resultPhoto.fullBlob);
+      const result = await createNoteWithPhotoAction(book.id, noteType, body, page, form);
       if (!result.ok) {
         setOcrError("generic");
         return;
