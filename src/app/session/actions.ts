@@ -12,8 +12,10 @@ import {
   type CreateSessionInput,
 } from "@/lib/db/sessions";
 import type { Book } from "@/lib/db/types";
+import { requireSignedIn } from "@/lib/require-user";
 
 export async function getBookAction(id: string): Promise<Book | null> {
+  await requireSignedIn();
   return getBook(id);
 }
 
@@ -24,6 +26,7 @@ export async function getTodayProgressAction(): Promise<{
   streakDays: number;
   goal: number;
 }> {
+  await requireSignedIn();
   const [today, streakDays, goal] = await Promise.all([getTodaySummary(), getStreakDays(), getDailyPagesGoal()]);
   return { ...today, streakDays, goal };
 }
@@ -32,6 +35,7 @@ export async function getTodayProgressAction(): Promise<{
 export async function prepareSessionAction(
   bookId: string,
 ): Promise<{ readingId: string; startPage: number }> {
+  await requireSignedIn();
   const book = await getBook(bookId);
   if (!book) throw new Error("Book not found");
 
@@ -51,6 +55,7 @@ export async function prepareSessionAction(
 export async function saveSessionAction(
   input: CreateSessionInput & { bookId: string },
 ): Promise<{ closedReading: boolean }> {
+  await requireSignedIn();
   const { bookId, ...sessionInput } = input;
   const sync = await createSessionAndSync(bookId, sessionInput);
   revalidatePath(`/books/${bookId}`);

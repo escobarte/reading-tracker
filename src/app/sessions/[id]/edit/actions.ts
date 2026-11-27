@@ -7,6 +7,7 @@ import {
   updateSessionAndSync,
   type UpdateSessionInput,
 } from "@/lib/db/sessions";
+import { requireSignedIn } from "@/lib/require-user";
 
 export type SessionMutationResult = { closedReading: boolean; needsRevertConfirm: boolean };
 
@@ -22,6 +23,7 @@ export async function updateSessionAction(
   bookId: string,
   input: UpdateSessionInput,
 ): Promise<SessionMutationResult> {
+  await requireSignedIn();
   const sync = await updateSessionAndSync(id, bookId, input);
   revalidateBook(bookId);
   return { closedReading: sync.justFinished, needsRevertConfirm: sync.needsRevertConfirm };
@@ -32,12 +34,14 @@ export async function deleteSessionAction(
   bookId: string,
   readingId: string,
 ): Promise<SessionMutationResult> {
+  await requireSignedIn();
   const sync = await deleteSessionAndSync(id, bookId, readingId);
   revalidateBook(bookId);
   return { closedReading: sync.justFinished, needsRevertConfirm: sync.needsRevertConfirm };
 }
 
 export async function revertReadingAction(readingId: string, bookId: string): Promise<void> {
+  await requireSignedIn();
   await reopenReading(readingId, bookId);
   revalidateBook(bookId);
 }

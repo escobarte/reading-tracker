@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createBook, findDuplicateBook, type BookInput } from "@/lib/db/books";
+import { requireSignedIn } from "@/lib/require-user";
 
 export type AddBookResult =
   | { ok: true; id: string }
@@ -9,6 +10,7 @@ export type AddBookResult =
   | { ok: false; reason: "error"; message: string };
 
 export async function addBookAction(input: BookInput): Promise<AddBookResult> {
+  await requireSignedIn();
   if (!input.title.trim()) {
     return { ok: false, reason: "error", message: "title_required" };
   }

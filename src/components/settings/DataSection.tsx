@@ -6,6 +6,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { formatTemplate } from "@/i18n/format";
 import { localDateKey } from "@/lib/time";
 import { ZipBuilder } from "@/lib/export/zip";
+import { leaveIfSignedOut } from "@/lib/leave-if-signed-out";
 
 function filenameFromResponse(res: Response, fallback: string): string {
   const match = res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/);
@@ -26,6 +27,7 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 /** arrayBuffer(), не text(): text() декодирует и снимает BOM у UTF-8, а CSV должен сохранить его как есть. */
 async function fetchAsBytes(url: string, fallbackFilename: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; filename: string }> {
   const res = await fetch(url, { cache: "no-store" });
+  leaveIfSignedOut(res);
   if (!res.ok) throw new Error(`export_failed:${url}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   return { bytes, filename: filenameFromResponse(res, fallbackFilename) };
@@ -120,6 +122,7 @@ function BackupZipButton() {
         fetchAsBytes("/notes/export", "notes.md"),
         fetch("/api/export/photos", { cache: "no-store" }),
       ]);
+      leaveIfSignedOut(photosRes);
       if (!photosRes.ok) throw new Error("export_failed:photos");
       const { photos } = (await photosRes.json()) as { photos: PhotoRef[] };
 
@@ -137,7 +140,9 @@ function BackupZipButton() {
         const photo = photos[i];
         try {
           const photoRes = await fetch(photo.url, { cache: "no-store" });
-          // Проверка типа: без входа вместо фото может прийти страница входа с кодом 200.
+          // Вход закрыли посреди сборки: неполный архив не сохраняется.
+          if (leaveIfSignedOut(photoRes)) return;
+          // Проверка типа: вместо фото может прийти страница с кодом 200, например от обратного прокси.
           if (!photoRes.ok || photoRes.headers.get("Content-Type") !== "image/jpeg") throw new Error();
           const bytes = new Uint8Array(await photoRes.arrayBuffer());
           zip.addFile(`photos/${photo.noteId}.jpg`, bytes);

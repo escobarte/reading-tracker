@@ -9,6 +9,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { bitmapFromFile, compressImage, photoFormData, type NormalizedRect } from "@/lib/image";
 import { createNoteWithPhotoAction, createPhotoNoteAction } from "@/app/notes/actions";
 import type { Book, NoteType } from "@/lib/db/types";
+import { leaveIfSignedOut } from "@/lib/leave-if-signed-out";
 
 type Step = "capture" | "select" | "result";
 
@@ -103,6 +104,7 @@ export function PhotoNoteWizard({ book, currentPage }: { book: Book; currentPage
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ image: cropBase64, mimeType: "image/jpeg", language: book.language }),
       });
+      if (leaveIfSignedOut(response)) return;
       if (response.status === 429) {
         setOcrError("limit");
         return;

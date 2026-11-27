@@ -72,6 +72,19 @@ export async function deleteNotePhoto(photoPath: string): Promise<void> {
   if (file) await rm(file, { force: true });
 }
 
+/**
+ * Файлы уже удалённых заметок. Сбой не прерывает действие: из базы всё удалено,
+ * а оставшийся файл только занимает место и попадает в журнал.
+ */
+export async function deleteNotePhotos(photoPaths: string[]): Promise<void> {
+  const results = await Promise.allSettled(photoPaths.map((photoPath) => deleteNotePhoto(photoPath)));
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.error("[photos] delete failed:", result.reason instanceof Error ? result.reason.message : result.reason);
+    }
+  }
+}
+
 /** Адрес фото заметки в приложении (отдаёт `/api/photos/[noteId]` только владельцу). */
 export function notePhotoUrl(noteId: string): string {
   return `/api/photos/${noteId}`;

@@ -1,5 +1,4 @@
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, dictionaries, isLocale } from "@/i18n/config";
 import { getBooksForCsv } from "@/lib/db/export";
 import { buildCsv } from "@/lib/export/csv";
@@ -7,12 +6,11 @@ import { formatLabel, shelfLabel } from "@/lib/export/labels";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { localDateKey } from "@/lib/time";
 import { pauseReasonLabel } from "@/lib/pause-reasons";
+import { unauthorized } from "@/lib/unauthorized";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-  }
+  if (!user) return unauthorized();
 
   const cookieStore = await cookies();
   const localeCookie = cookieStore.get(LOCALE_COOKIE)?.value;

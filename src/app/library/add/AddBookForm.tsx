@@ -10,6 +10,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import type { Dictionary } from "@/i18n/types";
 import type { BookSearchResult } from "@/lib/google-books";
 import { addBookAction, type AddBookResult } from "./actions";
+import { leaveIfSignedOut } from "@/lib/leave-if-signed-out";
 
 function formatLanguage(code: string | null, t: Dictionary): string | null {
   if (!code) return null;
@@ -51,6 +52,7 @@ export function AddBookForm({ genreSuggestions }: { genreSuggestions: string[] }
       setSearching(true);
       try {
         const response = await fetch(`/api/books/search?q=${encodeURIComponent(trimmed)}`);
+        if (leaveIfSignedOut(response)) return;
         const json: { results?: BookSearchResult[]; error?: string } = await response.json();
         setResults(json.results ?? []);
         setSearchFailed(Boolean(json.error));

@@ -3,7 +3,9 @@ import type { NextRequest } from "next/server";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, dictionaries, isLocale } from "@/i18n/config";
 import { listNotesForExport, type NoteWithBook } from "@/lib/db/notes";
 import type { NoteType } from "@/lib/db/types";
+import { getCurrentUser } from "@/lib/get-current-user";
 import { formatDeadlineDayMonth, localDateKey } from "@/lib/time";
+import { unauthorized } from "@/lib/unauthorized";
 
 function parseType(value: string | null): NoteType | null {
   return value === "quote" || value === "thought" || value === "word" || value === "photo" ? value : null;
@@ -65,6 +67,9 @@ function buildMarkdown(
 }
 
 export async function GET(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return unauthorized();
+
   const cookieStore = await cookies();
   const localeCookie = cookieStore.get(LOCALE_COOKIE)?.value;
   const locale = isLocale(localeCookie) ? localeCookie : DEFAULT_LOCALE;

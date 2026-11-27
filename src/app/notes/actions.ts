@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/get-current-user";
 import {
   createNote,
   createNoteWithPhoto,
@@ -18,6 +17,7 @@ import {
   type NoteInput,
 } from "@/lib/db/notes";
 import type { Note, NoteType } from "@/lib/db/types";
+import { requireSignedIn } from "@/lib/require-user";
 
 export type { NoteBookOption };
 
@@ -35,6 +35,7 @@ export async function getNoteEditorDataAction(): Promise<{
   books: NoteBookOption[];
   tagSuggestions: string[];
 }> {
+  await requireSignedIn();
   const [books, tagSuggestions] = await Promise.all([getBookPickerOptions(), getTagSuggestions()]);
   return { books, tagSuggestions };
 }
@@ -48,6 +49,7 @@ function validateBody(input: NoteInput, hasPhoto: boolean): { error: "empty" | "
 }
 
 export async function createNoteAction(input: NoteInput): Promise<SaveNoteResult> {
+  await requireSignedIn();
   const invalid = validateBody(input, false);
   if (invalid) return { ok: false, error: invalid.error };
 
@@ -57,6 +59,7 @@ export async function createNoteAction(input: NoteInput): Promise<SaveNoteResult
 }
 
 export async function updateNoteAction(id: string, input: NoteInput, hasPhoto = false): Promise<SaveNoteResult> {
+  await requireSignedIn();
   const invalid = validateBody(input, hasPhoto);
   if (invalid) return { ok: false, error: invalid.error };
 
@@ -69,11 +72,13 @@ export async function updateNoteAction(id: string, input: NoteInput, hasPhoto = 
 }
 
 export async function deleteNoteAction(id: string, bookId: string | null): Promise<void> {
+  await requireSignedIn();
   await deleteNote(id);
   revalidateNotePaths(bookId);
 }
 
 export async function toggleNoteFavoriteAction(id: string, favorite: boolean, bookId: string | null): Promise<void> {
+  await requireSignedIn();
   await setNoteFavorite(id, favorite);
   revalidateNotePaths(bookId);
 }
@@ -88,7 +93,7 @@ async function photoBytesFrom(form: FormData): Promise<Uint8Array> {
   return new Uint8Array(await photo.arrayBuffer());
 }
 
-export type SavePhotoNoteResult = { ok: true; note: Note } | { ok: false; error: "unauthorized" | "failed" };
+export type SavePhotoNoteResult = { ok: true; note: Note } | { ok: false; error: "failed" };
 
 /** «Сохранить как фото»: заметка типа `photo` без текста. */
 export async function createPhotoNoteAction(
@@ -96,8 +101,7 @@ export async function createPhotoNoteAction(
   page: number | null,
   photo: FormData,
 ): Promise<SavePhotoNoteResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "unauthorized" };
+  const user = await requireSignedIn();
 
   try {
     const note = await createPhotoNote({
@@ -121,8 +125,7 @@ export async function createNoteWithPhotoAction(
   page: number | null,
   photo: FormData,
 ): Promise<SavePhotoNoteResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "unauthorized" };
+  const user = await requireSignedIn();
 
   if (body.trim().length > MAX_NOTE_LENGTH) return { ok: false, error: "failed" };
 
@@ -150,8 +153,7 @@ export async function replaceNotePhotoAction(
   bookId: string | null,
   photo: FormData,
 ): Promise<PhotoActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false };
+  const user = await requireSignedIn();
   try {
     await replaceNotePhoto(user.id, noteId, await photoBytesFrom(photo));
     revalidateNotePaths(bookId);
@@ -163,6 +165,7 @@ export async function replaceNotePhotoAction(
 
 /** «Удалить фото» в правке заметки. */
 export async function removeNotePhotoAction(noteId: string, bookId: string | null): Promise<PhotoActionResult> {
+  await requireSignedIn();
   try {
     await removeNotePhoto(noteId);
     revalidateNotePaths(bookId);
@@ -174,5 +177,6 @@ export async function removeNotePhotoAction(noteId: string, bookId: string | nul
 
 /** Новый адрес фото заметки: после «Заменить» у него другая версия. */
 export async function getNotePhotoUrlAction(noteId: string): Promise<string | null> {
+  await requireSignedIn();
   return getNotePhotoUrl(noteId);
 }

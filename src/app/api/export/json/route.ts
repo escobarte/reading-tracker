@@ -1,13 +1,11 @@
-import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { getFullExportData } from "@/lib/db/export";
 import { localDateKey } from "@/lib/time";
+import { unauthorized } from "@/lib/unauthorized";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-  }
+  if (!user) return unauthorized();
 
   const data = await getFullExportData();
   const filename = `reading-tracker-${localDateKey(new Date())}.json`;

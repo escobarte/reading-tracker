@@ -1,12 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { searchBooks } from "@/lib/google-books";
+import { unauthorized } from "@/lib/unauthorized";
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  if (!user) return unauthorized();
 
   const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
   if (!query) {

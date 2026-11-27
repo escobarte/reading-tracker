@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { getOcrUsageToday, incrementOcrUsage } from "@/lib/db/ocr-usage";
 import { OCR_DAILY_LIMIT, OCR_MAX_UPLOAD_BYTES } from "@/lib/config";
 import { OCR_IMAGE_TYPES, OcrUpstreamError, normalizeOcrLanguage, recognizePageText, type OcrImageType } from "@/lib/ocr";
+import { unauthorized } from "@/lib/unauthorized";
 
 export const runtime = "nodejs";
 
@@ -18,11 +19,9 @@ function base64ByteLength(base64: string): number {
 }
 
 export async function POST(request: NextRequest) {
-  // Проверка входа внутри самого маршрута (getClaims), не только в proxy.ts.
+  // Проверка входа внутри самого маршрута, не только в proxy.ts.
   const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  if (!user) return unauthorized();
 
   let body: OcrRequestBody;
   try {

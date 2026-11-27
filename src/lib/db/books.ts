@@ -1,6 +1,6 @@
 import { and, desc, eq, ilike, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb, type Transaction } from "@/db";
-import { books, readings } from "@/db/schema";
+import { books, notes, readings } from "@/db/schema";
 import { requireUserId } from "@/lib/require-user";
 import { localYear } from "@/lib/time";
 import {
@@ -10,6 +10,7 @@ import {
   firstOrThrow,
   userTransaction,
 } from "./query";
+import { deleteNotePhotos } from "./photos";
 import type { Book, BookFormat, BookShelf } from "./types";
 
 export type BookInput = {
@@ -156,11 +157,25 @@ export async function updateBook(id: string, input: Partial<BookInput>): Promise
   return firstOrThrow(await getDb().update(books).set(patch).where(ownBook(userId, id)).returning());
 }
 
+/** Удаляет свою книгу вместе с прочтениями, сессиями, целями, заметками и файлами фото этих заметок. */
 export async function deleteBook(id: string): Promise<void> {
-  await userTransaction(async (tx, userId) => {
+  const photoPaths = await userTransaction(async (tx, userId) => {
+    // Блокировка книги не даёт добавить ей заметку, пока идёт удаление.
+    const [book] = await tx.select({ id: books.id }).from(books).where(ownBook(userId, id)).for("update");
+    if (!book) return [];
+
+    // Заметки удаляются явно, а не каскадом: так известны пути фото именно удалённых строк.
+    const removed = await tx
+      .delete(notes)
+      .where(and(eq(notes.user_id, userId), eq(notes.book_id, id)))
+      .returning({ photo_path: notes.photo_path });
     await tx.delete(books).where(ownBook(userId, id));
     await renumberQueue(tx, userId);
+    return removed.flatMap((note) => note.photo_path ?? []);
   });
+
+  // Файлы — после фиксации транзакции: при откате фото остаются на месте.
+  await deleteNotePhotos(photoPaths);
 }
 
 /** Новый порядок очереди. Список приходит из браузера и мог устареть, поэтому в конце перенумерация. */
